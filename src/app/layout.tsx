@@ -15,9 +15,9 @@ const pressStart = Press_Start_2P({
 });
 
 export const metadata: Metadata = {
-  title: "Forest Portfolio",
+  title: "Azzam Rafi Zafran — Interactive Town Portfolio",
   description:
-    "Interactive cozy top-down forest portfolio — explore education & work experiences like a miniature garden world.",
+    "Portfolio interaktif Azzam Rafi Zafran — jelajahi perjalanan pendidikan, pengalaman kerja di dunia IT, hobi, dan rumah virtual bergaya pixel game.",
 };
 
 export default function RootLayout({
