@@ -42,6 +42,8 @@ export interface BuildingData {
   kind: BuildingKind;
   name: string;
   shortLabel: string;
+  /** Institution / company name lines shown on the sign under the short label */
+  signLines: string[];
   /** Center of the front wall, at ground level */
   x: number;
   y: number;
@@ -79,8 +81,8 @@ export interface DecorItem {
   y: number;
 }
 
-export const WORLD_WIDTH = 1340;
-export const WORLD_HEIGHT = 920;
+export const WORLD_WIDTH = 1160;
+export const WORLD_HEIGHT = 770;
 export const PLAYER_SPEED = 150;
 export const CAMERA_LERP = 0.12;
 export const INTERACT_DISTANCE = 80;
@@ -89,7 +91,7 @@ export const NPC_GREET_DISTANCE = 90;
 /** Oblique projection used for building side faces & roofs */
 export const OBLIQUE = { x: 0.55, y: 0.42 };
 
-export const PLAYER_START = { x: 212, y: 400 };
+export const PLAYER_START = { x: 150, y: 340 };
 
 export const PLAYER_LOOK: CharacterLook = {
   skin: "#f6cfa8",
@@ -101,29 +103,34 @@ export const PLAYER_LOOK: CharacterLook = {
 };
 
 export const JUMP_TARGETS: { id: string; label: string; x: number; y: number }[] = [
-  { id: "home", label: "Rumah", x: 212, y: 400 },
-  { id: "schools", label: "Sekolah", x: 500, y: 322 },
-  { id: "campus", label: "Kuliah", x: 990, y: 532 },
-  { id: "offices", label: "Kantor", x: 1140, y: 650 },
+  { id: "home", label: "Rumah", x: 150, y: 340 },
+  { id: "schools", label: "Sekolah", x: 520, y: 340 },
+  { id: "campus", label: "Kuliah", x: 930, y: 650 },
+  { id: "offices", label: "Kantor", x: 380, y: 650 },
 ];
 
-/** Road with sharp corners, following the hand-drawn sketch */
+/** Row 1 (schools) runs left→right, then the road turns down and row 2 (campus → offices) runs back right→left */
+export const ROW1_Y = 340;
+export const ROW2_Y = 650;
+/** Gap between a building's ground line and the center of the road in front of it */
+const ROAD_GAP = 90;
+const ROW1_BASE = ROW1_Y - ROAD_GAP;
+const ROW2_BASE = ROW2_Y - ROAD_GAP;
+
+/** Simple U-shaped road: two straight streets joined by one connector */
 export const road: { x: number; y: number }[] = [
-  { x: 205, y: 395 },
-  { x: 300, y: 240 },
-  { x: 620, y: 378 },
-  { x: 540, y: 474 },
-  { x: 640, y: 532 },
-  { x: 1140, y: 532 },
-  { x: 1140, y: 752 },
-  { x: 880, y: 752 },
+  { x: 110, y: ROW1_Y },
+  { x: 1080, y: ROW1_Y },
+  { x: 1080, y: ROW2_Y },
+  { x: 110, y: ROW2_Y },
 ];
 export const ROAD_WIDTH = 40;
 
-export const pond = { x: 760, y: 532, rx: 92, ry: 76 };
+/** Pond sits on row 2, between campus and the first office */
+export const pond = { x: 745, y: ROW2_Y, rx: 72, ry: 56 };
 
 /** Bridge spans the whole pond so both ends land on grass/road */
-export const bridge = { x: 760, y: 532, width: 232, deckHeight: 58, walkHalfHeight: 18 };
+export const bridge = { x: 745, y: ROW2_Y, width: 184, deckHeight: 58, walkHalfHeight: 18 };
 
 export const buildings: BuildingData[] = [
   {
@@ -131,8 +138,9 @@ export const buildings: BuildingData[] = [
     kind: "home",
     name: "Rumah",
     shortLabel: "Rumah",
-    x: 100,
-    y: 382,
+    signLines: [],
+    x: 140,
+    y: ROW1_BASE,
     hasFloatingIcon: true,
     visual: {
       style: "home",
@@ -165,10 +173,11 @@ export const buildings: BuildingData[] = [
   {
     id: "tk",
     kind: "school",
-    name: "Taman Kanak-Kanak",
+    name: "TK Ar Rofa",
     shortLabel: "TK",
+    signLines: ["Ar Rofa"],
     x: 330,
-    y: 180,
+    y: ROW1_BASE,
     visual: {
       style: "school",
       width: 96,
@@ -193,10 +202,11 @@ export const buildings: BuildingData[] = [
   {
     id: "sd",
     kind: "school",
-    name: "Sekolah Dasar",
+    name: "SD Fathan Mubina",
     shortLabel: "SD",
-    x: 480,
-    y: 250,
+    signLines: ["Fathan Mubina"],
+    x: 520,
+    y: ROW1_BASE,
     visual: {
       style: "school",
       width: 110,
@@ -221,10 +231,11 @@ export const buildings: BuildingData[] = [
   {
     id: "smp",
     kind: "school",
-    name: "Sekolah Menengah Pertama",
+    name: "SMP Roudlotul Jannah",
     shortLabel: "SMP",
-    x: 690,
-    y: 330,
+    signLines: ["Roudlotul Jannah"],
+    x: 710,
+    y: ROW1_BASE,
     visual: {
       style: "school",
       width: 110,
@@ -249,10 +260,11 @@ export const buildings: BuildingData[] = [
   {
     id: "sma",
     kind: "school",
-    name: "Sekolah Menengah Atas",
-    shortLabel: "SMA",
-    x: 380,
-    y: 600,
+    name: "SMA/K Wikrama Garut (Tahun ke-1) · Farmako Medika Plus (Tahun ke-2 & 3)",
+    shortLabel: "SMA/K",
+    signLines: ["Wikrama Garut (Thn 1)", "Farmako Medika Plus (Thn 2-3)"],
+    x: 900,
+    y: ROW1_BASE,
     visual: {
       style: "school",
       width: 120,
@@ -277,10 +289,11 @@ export const buildings: BuildingData[] = [
   {
     id: "kuliah",
     kind: "school",
-    name: "Perguruan Tinggi",
+    name: "Universitas Telkom",
     shortLabel: "Kuliah",
-    x: 990,
-    y: 470,
+    signLines: ["Universitas Telkom"],
+    x: 940,
+    y: ROW2_BASE,
     visual: {
       style: "campus",
       width: 140,
@@ -307,14 +320,15 @@ export const buildings: BuildingData[] = [
   {
     id: "office1",
     kind: "office",
-    name: "Kantor Pertama",
+    name: "CV Sinang Permata Group",
     shortLabel: "Office 1",
-    x: 1235,
-    y: 690,
+    signLines: ["CV Sinang Permata Group"],
+    x: 560,
+    y: ROW2_BASE,
     visual: {
       style: "office",
       width: 96,
-      wallHeight: 150,
+      wallHeight: 132,
       depth: 56,
       roofHeight: 0,
       floors: 6,
@@ -335,10 +349,11 @@ export const buildings: BuildingData[] = [
   {
     id: "office2",
     kind: "office",
-    name: "Kantor Kedua",
+    name: "PT. Geomatika Satelit Indonesia",
     shortLabel: "Office 2",
-    x: 1010,
-    y: 696,
+    signLines: ["PT. Geomatika Satelit", "Indonesia"],
+    x: 375,
+    y: ROW2_BASE,
     visual: {
       style: "office",
       width: 104,
@@ -363,10 +378,11 @@ export const buildings: BuildingData[] = [
   {
     id: "office3",
     kind: "office",
-    name: "Kantor Ketiga",
+    name: "PT. Adidata Informatika (saat ini)",
     shortLabel: "Office 3",
-    x: 790,
-    y: 800,
+    signLines: ["PT. Adidata Informatika", "★ Saat ini"],
+    x: 190,
+    y: ROW2_BASE,
     visual: {
       style: "office",
       width: 110,
@@ -441,13 +457,15 @@ export const npcs: NpcData[] = buildings
   .flatMap((b) => {
     const [mName, fName] = npcNames[b.id];
     const [mLook, fLook] = npcLooks[b.id];
+    // Stand beside the front corners so the name sign stays readable
+    const offset = b.visual.width / 2 + 14;
     return [
       {
         id: `${b.id}-m`,
         buildingId: b.id,
         name: mName,
         gender: "male" as const,
-        x: b.x - 40,
+        x: b.x - offset,
         y: b.y + 20,
         look: mLook,
         dialogue: ["Halo Azzam!"],
@@ -457,7 +475,7 @@ export const npcs: NpcData[] = buildings
         buildingId: b.id,
         name: fName,
         gender: "female" as const,
-        x: b.x + 40,
+        x: b.x + offset,
         y: b.y + 20,
         look: fLook,
         dialogue: ["Halo Azzam!"],
@@ -466,42 +484,42 @@ export const npcs: NpcData[] = buildings
   });
 
 export const decor: DecorItem[] = [
-  { id: "t1", kind: "tree", x: 40, y: 250 },
-  { id: "t2", kind: "pine", x: 40, y: 520 },
-  { id: "t3", kind: "tree", x: 190, y: 110 },
-  { id: "t4", kind: "pine", x: 610, y: 100 },
-  { id: "t5", kind: "tree", x: 860, y: 180 },
-  { id: "t6", kind: "tree", x: 1080, y: 200 },
-  { id: "t7", kind: "pine", x: 1300, y: 440 },
-  { id: "t8", kind: "tree", x: 560, y: 700 },
-  { id: "t9", kind: "tree", x: 200, y: 620 },
-  { id: "t10", kind: "pine", x: 120, y: 800 },
-  { id: "t11", kind: "tree", x: 400, y: 840 },
-  { id: "t12", kind: "pine", x: 640, y: 880 },
-  { id: "t13", kind: "tree", x: 1000, y: 870 },
-  { id: "t14", kind: "pine", x: 1250, y: 860 },
-  { id: "t15", kind: "tree", x: 1290, y: 200 },
-  { id: "b1", kind: "bush", x: 250, y: 470 },
-  { id: "b2", kind: "bush", x: 500, y: 420 },
-  { id: "b3", kind: "bush", x: 875, y: 440 },
-  { id: "b4", kind: "bush", x: 930, y: 640 },
-  { id: "b5", kind: "bush", x: 330, y: 700 },
-  { id: "f1", kind: "flowers", x: 160, y: 440 },
-  { id: "f2", kind: "flowers", x: 280, y: 520 },
-  { id: "f3", kind: "flowers", x: 860, y: 620 },
-  { id: "f4", kind: "flowers", x: 1180, y: 470 },
-  { id: "f5", kind: "flowers", x: 560, y: 600 },
-  { id: "f6", kind: "flowers", x: 1060, y: 820 },
-  { id: "f7", kind: "flowers", x: 240, y: 170 },
-  { id: "r1", kind: "rock", x: 300, y: 640 },
-  { id: "r2", kind: "rock", x: 1080, y: 880 },
-  { id: "r3", kind: "rock", x: 560, y: 800 },
-  { id: "l1", kind: "lamp", x: 230, y: 300 },
-  { id: "l2", kind: "lamp", x: 400, y: 250 },
-  { id: "l3", kind: "lamp", x: 612, y: 575 },
-  { id: "l4", kind: "lamp", x: 940, y: 575 },
-  { id: "l5", kind: "lamp", x: 1176, y: 630 },
-  { id: "l6", kind: "lamp", x: 1000, y: 792 },
+  // Top strip, tucked between building backs
+  { id: "t1", kind: "tree", x: 236, y: 120 },
+  { id: "t2", kind: "pine", x: 425, y: 110 },
+  { id: "t3", kind: "tree", x: 615, y: 118 },
+  { id: "t4", kind: "pine", x: 805, y: 110 },
+  { id: "t5", kind: "tree", x: 1060, y: 150 },
+  { id: "t6", kind: "pine", x: 45, y: 120 },
+  // Left & right edges
+  { id: "t7", kind: "pine", x: 45, y: 480 },
+  { id: "t8", kind: "tree", x: 1132, y: 540 },
+  // Bottom strip, below the second street
+  { id: "t9", kind: "tree", x: 90, y: 745 },
+  { id: "t10", kind: "pine", x: 290, y: 750 },
+  { id: "t11", kind: "tree", x: 470, y: 748 },
+  { id: "t12", kind: "pine", x: 640, y: 752 },
+  { id: "t13", kind: "tree", x: 1000, y: 748 },
+  { id: "t14", kind: "pine", x: 1120, y: 750 },
+  { id: "b1", kind: "bush", x: 60, y: 300 },
+  { id: "b2", kind: "bush", x: 1128, y: 640 },
+  { id: "b3", kind: "bush", x: 745, y: 470 },
+  { id: "b4", kind: "bush", x: 60, y: 600 },
+  { id: "f1", kind: "flowers", x: 236, y: 290 },
+  { id: "f2", kind: "flowers", x: 805, y: 292 },
+  { id: "f3", kind: "flowers", x: 745, y: 520 },
+  { id: "f4", kind: "flowers", x: 380, y: 712 },
+  { id: "f5", kind: "flowers", x: 880, y: 714 },
+  { id: "f6", kind: "flowers", x: 1125, y: 300 },
+  { id: "r1", kind: "rock", x: 560, y: 716 },
+  { id: "r2", kind: "rock", x: 820, y: 750 },
+  // Street lamps along both streets
+  { id: "l1", kind: "lamp", x: 425, y: 308 },
+  { id: "l2", kind: "lamp", x: 615, y: 308 },
+  { id: "l3", kind: "lamp", x: 1040, y: 308 },
+  { id: "l4", kind: "lamp", x: 1120, y: 420 },
+  { id: "l5", kind: "lamp", x: 200, y: 684 },
+  { id: "l6", kind: "lamp", x: 940, y: 684 },
 ];
 
 /** Screen-space-independent bounds of a building sprite (for clicks / culling) */

@@ -108,7 +108,7 @@ export function drawBuilding(w: WorldRenderContext, b: BuildingData, highlight =
       break;
   }
 
-  drawSign(ctx, sx, base + 36, b.shortLabel);
+  drawSign(ctx, sx, base + 8, b.shortLabel, b.signLines);
 
   if (b.hasFloatingIcon) {
     drawFloatingIcon(ctx, sx + dx / 2, g.T - v.roofHeight - dy / 2 - 16, time);
@@ -659,18 +659,46 @@ function flagPole(ctx: CanvasRenderingContext2D, x: number, base: number, h: num
   ctx.strokeRect(x + 1, top, fw, 12);
 }
 
-function drawSign(ctx: CanvasRenderingContext2D, cx: number, y: number, text: string): void {
-  ctx.font = "700 10px ui-sans-serif, system-ui, sans-serif";
-  const tw = Math.max(36, ctx.measureText(text).width + 12);
+/** Wooden name board: bold short label on top, institution name lines below */
+function drawSign(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  top: number,
+  label: string,
+  lines: string[],
+): void {
+  const labelFont = "800 10px ui-sans-serif, system-ui, sans-serif";
+  const nameFont = "600 9px ui-sans-serif, system-ui, sans-serif";
+  const lineH = 11;
+  ctx.font = labelFont;
+  let textW = ctx.measureText(label).width;
+  ctx.font = nameFont;
+  for (const line of lines) textW = Math.max(textW, ctx.measureText(line).width);
+  const tw = Math.max(36, textW + 12);
+  const th = 6 + lineH * (1 + lines.length);
   const x = cx - tw / 2;
+
+  // Posts
   ctx.fillStyle = "#6b4226";
-  ctx.fillRect(cx - 1.5, y - 10, 3, 10);
-  roundRectPath(ctx, x, y - 25, tw, 16, 3);
+  ctx.fillRect(x + 5, top + th - 2, 3, 6);
+  ctx.fillRect(x + tw - 8, top + th - 2, 3, 6);
+
+  roundRectPath(ctx, x, top, tw, th, 3);
   fillStroke(ctx, "#fff6e0", 2, "#6b4226");
-  ctx.fillStyle = "#3b2a1a";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, cx, y - 16.5);
+  ctx.fillStyle = "#3b2a1a";
+  ctx.font = labelFont;
+  ctx.fillText(label, cx, top + 3 + lineH / 2 + 0.5);
+  if (lines.length) {
+    ctx.fillStyle = "rgba(107, 66, 38, 0.35)";
+    ctx.fillRect(x + 6, top + 3 + lineH, tw - 12, 1);
+    ctx.fillStyle = "#6b4226";
+    ctx.font = nameFont;
+    lines.forEach((line, i) => {
+      ctx.fillText(line, cx, top + 3 + lineH * (i + 1) + lineH / 2 + 1);
+    });
+  }
 }
 
 function lerp(a: Pt, b: Pt, t: number): Pt {

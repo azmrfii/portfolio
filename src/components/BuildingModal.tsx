@@ -37,6 +37,9 @@ export default function BuildingModal({ building, onClose }: BuildingModalProps)
             >
               {modal.title}
             </h2>
+            {building.signLines.length > 0 && kind !== "home" && (
+              <p className="mt-1 text-xs font-bold text-[#5b3a29]">📍 {building.name}</p>
+            )}
             {modal.subtitle && (
               <p className="mt-2 text-sm text-[#6b4f3a]">{modal.subtitle}</p>
             )}
