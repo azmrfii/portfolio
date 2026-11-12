@@ -6,3 +6,4 @@ export * from "./drawCharacter";
 export * from "./drawPlayer";
 export * from "./drawNpc";
 export * from "./drawSpeechBubble";
+export * from "./drawHouse";

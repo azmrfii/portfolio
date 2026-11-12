@@ -108,7 +108,9 @@ export function drawBuilding(w: WorldRenderContext, b: BuildingData, highlight =
       break;
   }
 
-  drawSign(ctx, sx, base + 8, b.shortLabel, b.signLines);
+  // Place the sign to the left of the house door so the player doesn't cover it; centered for others
+  const signX = b.id === "home" ? g.L - 28 : sx;
+  drawSign(ctx, signX, base + 8, b.shortLabel, b.signLines);
 
   if (b.hasFloatingIcon) {
     drawFloatingIcon(ctx, sx + dx / 2, g.T - v.roofHeight - dy / 2 - 16, time);
