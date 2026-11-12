@@ -334,6 +334,7 @@ export default function GameCanvas({
             subtitle: item.room,
             pages: item.pages,
             tags: item.tags,
+            links: item.links,
             image: item.image,
           });
       }

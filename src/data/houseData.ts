@@ -30,6 +30,12 @@ export interface SeatSpot {
   facing: Facing;
 }
 
+export interface ContactLink {
+  label: string;
+  value: string;
+  href: string;
+}
+
 export interface HouseDialogueItem {
   id: string;
   kind: FurnitureKind;
@@ -54,6 +60,7 @@ export interface HouseDialogueItem {
   speaker: string;
   pages: string[];
   tags?: string[];
+  links?: ContactLink[];
   image?: { src: string; alt: string };
   isExit?: boolean;
 }
@@ -101,7 +108,7 @@ export const HOUSE_SPAWN = { x: 460, y: 555 };
 export const TOWN_HOUSE_DOOR = { x: 140, y: 280 };
 
 /** Drop the PNG here: public/images/family-photo.png */
-export const FAMILY_PHOTO_SRC = "/images/family-photo.png";
+export const FAMILY_PHOTO_SRC = "/images/family-photo.jpeg";
 
 export const BUCKET_LIST = [
   "Ke Bandung",
@@ -262,8 +269,8 @@ export const houseFurniture: HouseDialogueItem[] = [
     solid: true,
     speaker: "📚 Rak Buku",
     pages: [
-      "Kumpulan buku software engineering, desain produk, pengembangan diri, dan beberapa komik favorit.",
-      "Selalu senang mempelajari hal baru — mulai dari arsitektur frontend sampai cara bikin web terasa hidup kayak game.",
+      "Dulu suka baca buku novel (apalagi kalau novelnya romance).",
+      "Sekarang lebih suka baca quotes sederhana dari LINE TODAY..",
     ],
     tags: ["Clean Code", "Design", "Lifelong Learner"],
   },
@@ -333,7 +340,7 @@ export const houseFurniture: HouseDialogueItem[] = [
     solid: true,
     speaker: "📷 Hobi: Fotografi",
     pages: [
-      "\"Bagi gw, foto itu kenangan ketika kita ga bisa kembali ke masa lalu.\"",
+      "\"Bagi aku, foto itu sebuah kenangan untuk mengingat bahwa kita ga bisa kembali ke masa lalu.\"",
       "Kamera selalu siap buat mengabadikan momen yang nggak akan terulang dua kali.",
     ],
     tags: ["Photography", "Memories"],
@@ -418,9 +425,15 @@ export const houseFurniture: HouseDialogueItem[] = [
     speaker: "☎️ Kontak & Kolaborasi",
     pages: [
       "Tertarik diskusi, kolaborasi proyek, atau sekadar menyapa? Jangan ragu buat menghubungi!",
-      "(Placeholder: tambahkan link Email, LinkedIn, GitHub, dan Instagram di src/data/houseData.ts.)",
+      "📞 Contact / WhatsApp: 081384197696\n✉️ Email: azzamrafizafran@gmail.com\n💼 LinkedIn: linkedin.com/in/azzamrafizafran\n🐙 GitHub: github.com/azmrfii",
     ],
-    tags: ["Contact", "GitHub", "LinkedIn", "Email"],
+    links: [
+      { label: "📞 081384197696", value: "081384197696", href: "https://wa.me/6281384197696" },
+      { label: "✉️ Email", value: "azzamrafizafran@gmail.com", href: "mailto:azzamrafizafran@gmail.com" },
+      { label: "💼 LinkedIn", value: "linkedin.com/in/azzamrafizafran", href: "https://www.linkedin.com/in/azzamrafizafran/" },
+      { label: "🐙 GitHub", value: "github.com/azmrfii", href: "https://github.com/azmrfii" },
+    ],
+    tags: ["081384197696", "GitHub", "LinkedIn", "Email"],
   },
   {
     id: "plant",
@@ -494,7 +507,7 @@ export const houseFurniture: HouseDialogueItem[] = [
     height: 96,
     solid: true,
     speaker: "🏃 Treadmill",
-    pages: ["Pemanasan dulu sebelum angkat beban, atau cardio santai sambil dengerin playlist."],
+    pages: ["Mending lari di atas treadmill, dari pada lari ngejar dia yang ga bisa digapai."],
     tags: ["Cardio"],
   },
 
@@ -541,8 +554,8 @@ export const houseCats: CatData[] = [
     pitch: 0.88,
     meows: ["Meong~ 🐾", "Prrr...", "Miaw!"],
     pages: [
-      "🐾 Gray Pi (Kucing Jantan) — Si ganteng berbulu abu-abu putih yang kalem tapi suka penasaran kalau Azzam lagi ngetik di laptop.",
-      "Gray Pi paling hobi rebahan di karpet kamar sambil dengerin suara keyboard!",
+      "🐾 Gray Pi (Kucing Jantan) — Dulu anteng pas masih kecil, takut kalau mau disentuh, tapi udah agak gedenya malah nyamperin mulu.",
+      "Kamu kemana Gray Pi, kenapa ga pulang pulang sampe sekarang..",
     ],
   },
   {
@@ -568,8 +581,8 @@ export const houseCats: CatData[] = [
     pitch: 1.18,
     meows: ["Miuw~ 💕", "Meow!", "Purrr~"],
     pages: [
-      "🐾 Kimmy (Kucing Betina) — Si manis tiga warna: cream, putih, dan abu. Lincah, ramah, dan paling suka nyamperin siapa pun yang duduk di sofa.",
-      "Kalau dielus, Kimmy langsung purring kencang dan berguling manja!",
+      "🐾 Kimmy (Kucing Betina) — Anaknya boba, kalau pintu dibuka suka lari nyelonong masuk.",
+      "Pengennya dimanja!",
     ],
   },
   {
@@ -595,8 +608,8 @@ export const houseCats: CatData[] = [
     pitch: 1.08,
     meows: ["Meow~ 🧋", "Nyaa!", "Prrr~"],
     pages: [
-      "🐾 Boba (Kucing Betina) — Kembaran warna Kimmy: cream, putih, dan abu! Bedanya, Boba lebih banyak abu di punggungnya.",
-      "Boba suka nongkrong di ruang hobi, apalagi kalau speaker lagi muter lagu.",
+      "🐾 Boba (Kucing Betina) — Ibunya Kimmy: Pulang kerumah kalau lagi bunting doang.",
+      "Suka nyelonong lewat jendela kalau dibuka, sempet naro anaknya habis lahiran di lemari baju.",
     ],
   },
 ];

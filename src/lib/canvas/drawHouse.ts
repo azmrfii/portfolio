@@ -350,7 +350,6 @@ function drawWallDecor(ctx: CanvasRenderingContext2D, time: number): void {
 
   // Ruang Tamu: wall clock showing the real time
   drawClock(ctx, 452, 346, 11);
-  drawWindow(ctx, 246, 334, 30, 22);
 
   // Ruang Gym: big mirror and motivational sign
   roundRectPath(ctx, 682, 332, 116, 30, 2);

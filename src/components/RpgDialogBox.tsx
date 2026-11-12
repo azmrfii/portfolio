@@ -1,5 +1,6 @@
 "use client";
 
+import type { ContactLink } from "@/data/houseData";
 import { sound } from "@/lib/audio/chiptune";
 import { useCallback, useEffect, useState } from "react";
 
@@ -13,6 +14,7 @@ export interface RpgDialogData {
   subtitle?: string;
   pages: string[];
   tags?: string[];
+  links?: ContactLink[];
   image?: { src: string; alt: string };
   /** Shown once the last page has finished typing */
   choices?: RpgDialogChoice[];
@@ -168,6 +170,23 @@ export default function RpgDialogBox({ dialog, onClose, onChoose }: RpgDialogBox
                 {i === selected ? "▶ " : ""}
                 {c.label}
               </button>
+            ))}
+          </div>
+        )}
+
+        {dialog.links && dialog.links.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {dialog.links.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="pixel-btn !bg-[#e8f5d8] hover:!bg-[#fde68a] px-2.5 py-1 text-[10px] font-bold text-[#3b2a1a]"
+              >
+                {link.label} ↗
+              </a>
             ))}
           </div>
         )}
