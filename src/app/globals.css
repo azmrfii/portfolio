@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+:root {
+  --forest-sky: #7ec8e8;
+  --forest-moss: #5d8a4a;
+  --forest-path: #c4a574;
+  --cozy-cream: #fff8e7;
+  --cozy-wood: #5b3a29;
+  --cozy-bark: #3b2a1a;
+  --cozy-leaf: #e8f5d8;
+  --cozy-sun: #f5e6c8;
+  --background: var(--forest-sky);
+  --foreground: var(--cozy-bark);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
+  --font-pixel: var(--font-pixel), ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+canvas {
+  image-rendering: auto;
+}
+
+.font-pixel {
+  font-family: var(--font-pixel);
+}
+
+.pixel-panel {
+  background: var(--cozy-cream);
+  border: 4px solid var(--cozy-wood);
+  box-shadow:
+    4px 4px 0 rgba(59, 42, 26, 0.25),
+    inset 0 0 0 2px #e8d9b8;
+  padding: 1rem 1.1rem;
+  border-radius: 2px;
+}
+
+.pixel-btn {
+  background: var(--cozy-sun);
+  border: 3px solid var(--cozy-wood);
+  color: var(--cozy-bark);
+  font-family: var(--font-pixel);
+  box-shadow: 2px 2px 0 rgba(59, 42, 26, 0.3);
+  transition:
+    transform 80ms ease,
+    box-shadow 80ms ease,
+    background 120ms ease;
+}
+
+.pixel-btn:hover {
+  background: var(--cozy-leaf);
+}
+
+.pixel-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 rgba(59, 42, 26, 0.3);
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-modal-in {
+  animation: modal-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-modal-in {
+    animation: none;
+  }
+}
