@@ -433,7 +433,7 @@ export const houseFurniture: HouseDialogueItem[] = [
       { label: "💼 LinkedIn", value: "linkedin.com/in/azzamrafizafran", href: "https://www.linkedin.com/in/azzamrafizafran/" },
       { label: "🐙 GitHub", value: "github.com/azmrfii", href: "https://github.com/azmrfii" },
     ],
-    tags: ["081384197696", "GitHub", "LinkedIn", "Email"],
+    // tags: ["081384197696", "GitHub", "LinkedIn", "Email"],
   },
   {
     id: "plant",
