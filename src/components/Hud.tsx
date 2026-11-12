@@ -145,7 +145,9 @@ export default function Hud({
                     y={r.y}
                     width={r.w}
                     height={r.h}
-                    fill={r.floor === "tile" ? "#e5dac5" : "#c89664"}
+                    fill={
+                      r.floor === "gym" ? "#4b5563" : r.floor === "dark_wood" ? "#9a6a45" : "#d2a26f"
+                    }
                     stroke="#5b3a29"
                     strokeWidth={8}
                   />

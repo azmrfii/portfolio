@@ -12,6 +12,8 @@ export interface CharacterPose {
   time: number;
   /** Desync idle breathing between characters */
   seed?: number;
+  /** Seated pose; only supported when facing up or down */
+  sitting?: boolean;
 }
 
 const LINE = 1.3;
@@ -28,7 +30,7 @@ export function drawCharacter(
   pose: CharacterPose,
   scale = 1.1,
 ): void {
-  groundShadow(ctx, x, y + 1, 11 * scale, 4 * scale, 0.25);
+  if (!pose.sitting) groundShadow(ctx, x, y + 1, 11 * scale, 4 * scale, 0.25);
 
   ctx.save();
   ctx.translate(x, y);
@@ -38,7 +40,9 @@ export function drawCharacter(
 
   const facing: Facing = pose.waving && pose.facing === "up" ? "down" : pose.facing;
 
-  if (facing === "left") {
+  if (pose.sitting && (facing === "up" || facing === "down")) {
+    drawSitting(ctx, look, pose, facing === "down");
+  } else if (facing === "left") {
     ctx.scale(-1, 1);
     drawSide(ctx, look, pose);
   } else if (facing === "right") {
@@ -133,6 +137,54 @@ function drawFrontBack(
   }
 
   drawHeadFrontBack(ctx, look, pose, front);
+  ctx.restore();
+}
+
+function drawSitting(
+  ctx: CanvasRenderingContext2D,
+  look: CharacterLook,
+  pose: CharacterPose,
+  front: boolean,
+): void {
+  const still = { ...pose, moving: false };
+  ctx.save();
+  ctx.translate(0, 6 + bodyBob(still) * 0.5);
+
+  if (!front) drawBackHair(ctx, look, true);
+
+  if (front) {
+    // Thighs point toward the viewer, so only shins and shoes show below the torso
+    for (const lx of [-6, 1.2]) {
+      roundRectPath(ctx, lx, -12, 4.8, 8, 2);
+      fillStroke(ctx, look.pants, LINE);
+      ctx.beginPath();
+      ctx.ellipse(lx + 2.4, -4, 3.4, 2.1, 0, 0, Math.PI * 2);
+      fillStroke(ctx, look.shoes, LINE);
+    }
+  }
+
+  if (!front) {
+    // Typing: arms reach forward (up-screen) onto the desk, behind the torso
+    drawArm(ctx, -8, -22, -2.75, look);
+    drawArm(ctx, 8, -22, 2.75, look);
+  }
+
+  roundRectPath(ctx, -8, -25, 16, 14, 5);
+  fillStroke(ctx, look.shirt, LINE);
+  roundRectPath(ctx, -7.6, -14.5, 15.2, 4, 1.5);
+  fillStroke(ctx, look.pants, LINE);
+
+  if (front) {
+    // Hands resting on the lap
+    drawArm(ctx, -9, -23, -0.35, look);
+    if (pose.waving) {
+      drawArm(ctx, 9, -23, -2.55 + Math.sin(pose.waveTime * 0.018) * 0.4, look);
+    } else {
+      drawArm(ctx, 9, -23, 0.35, look);
+    }
+  }
+
+  drawHeadFrontBack(ctx, look, still, front);
   ctx.restore();
 }
 

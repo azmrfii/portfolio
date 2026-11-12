@@ -16,21 +16,42 @@ export default function PortfolioGame() {
   const [nearestLabel, setNearestLabel] = useState<string | null>(null);
   const [activeBuilding, setActiveBuilding] = useState<BuildingData | null>(null);
   const [activeDialog, setActiveDialog] = useState<RpgDialogData | null>(null);
+  const [dialogKey, setDialogKey] = useState(0);
+  const dialogRef = useRef<RpgDialogData | null>(null);
   const [muted, setMuted] = useState(() => sound.isMuted());
 
+  const openDialog = useCallback((dialog: RpgDialogData) => {
+    dialogRef.current = dialog;
+    setActiveDialog(dialog);
+    setDialogKey((k) => k + 1);
+  }, []);
+
   const closeModal = useCallback(() => setActiveBuilding(null), []);
-  const closeDialog = useCallback(() => setActiveDialog(null), []);
+
+  const closeDialog = useCallback(() => {
+    const d = dialogRef.current;
+    if (!d) return;
+    dialogRef.current = null;
+    setActiveDialog(null);
+    d.onClose?.();
+  }, []);
+
+  const chooseDialog = useCallback((id: string) => {
+    const d = dialogRef.current;
+    if (!d) return;
+    dialogRef.current = null;
+    setActiveDialog(null);
+    // May open a follow-up dialog via openDialog
+    d.onChoice?.(id);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        closeModal();
-        closeDialog();
-      }
+      if (e.key === "Escape") closeModal();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [closeDialog, closeModal]);
+  }, [closeModal]);
 
   const handleToggleMute = useCallback(() => {
     const next = sound.toggleMute();
@@ -46,7 +67,7 @@ export default function PortfolioGame() {
         overlayOpen={!!activeBuilding || !!activeDialog}
         onNearestLabelChange={setNearestLabel}
         onOpenBuilding={setActiveBuilding}
-        onOpenDialog={setActiveDialog}
+        onOpenDialog={openDialog}
         onPlayerPos={setPlayerPos}
       />
 
@@ -68,9 +89,10 @@ export default function PortfolioGame() {
 
       <BuildingModal building={activeBuilding} onClose={closeModal} />
       <RpgDialogBox
-        key={activeDialog ? activeDialog.speaker : "closed"}
+        key={dialogKey}
         dialog={activeDialog}
         onClose={closeDialog}
+        onChoose={chooseDialog}
       />
     </div>
   );

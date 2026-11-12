@@ -1,10 +1,13 @@
 "use client";
 
 import {
+  ABOUT_DIALOG,
+  BUCKET_LIST,
   HOUSE_HEIGHT,
   HOUSE_SPAWN,
   HOUSE_WIDTH,
   TOWN_HOUSE_DOOR,
+  getFurnitureRect,
   houseCats,
   houseFurniture,
   isHouseBlocked,
@@ -33,7 +36,9 @@ import {
   drawBuilding,
   drawCat,
   drawDecor,
+  drawDeskChairBack,
   drawFurnitureItem,
+  furnitureTopY,
   drawHouseGround,
   drawNpc,
   drawPlayer,
@@ -131,11 +136,14 @@ export default function GameCanvas({
     vx: 0,
     vy: 0,
     facing: "down",
+    pose: "stand",
     anim: "idle",
     animTime: 0,
     waving: false,
     waveTimer: 0,
   });
+  /** Furniture the player is currently sitting or sleeping on */
+  const seatRef = useRef<HouseDialogueItem | null>(null);
   const cameraRef = useRef({ x: 0, y: 0 });
   const sceneRef = useRef<"town" | "house">(scene);
   const fadeRef = useRef<{ alpha: number; dir: -1 | 0 | 1; onMid?: () => void }>({
@@ -192,6 +200,8 @@ export default function GameCanvas({
           onSceneChange(target);
           sound.setTheme(target);
           const p = playerRef.current;
+          p.pose = "stand";
+          seatRef.current = null;
           const canvas = canvasRef.current;
           const vw = canvas?.clientWidth ?? 800;
           const vh = canvas?.clientHeight ?? 600;
@@ -216,6 +226,121 @@ export default function GameCanvas({
     [onPlayerPos, onSceneChange],
   );
 
+  const standUp = useCallback(() => {
+    const p = playerRef.current;
+    const item = seatRef.current;
+    if (!item || p.pose === "stand") return;
+    const spot = item.standSpot ?? { x: p.x, y: p.y + 24 };
+    p.x = spot.x;
+    p.y = spot.y;
+    p.pose = "stand";
+    p.facing = "down";
+    seatRef.current = null;
+  }, []);
+
+  const sitOn = useCallback((item: HouseDialogueItem) => {
+    const p = playerRef.current;
+    const seats = item.seats ?? [];
+    if (seats.length === 0) return;
+    const seat = seats.reduce((best, s) =>
+      Math.hypot(s.x - p.x, s.y - p.y) < Math.hypot(best.x - p.x, best.y - p.y) ? s : best,
+    );
+    p.x = seat.x;
+    p.y = seat.y;
+    p.facing = seat.facing;
+    p.pose = "sit";
+    p.waving = false;
+    seatRef.current = item;
+
+    if (item.kind === "sofa") {
+      // Kimmy loves company on the sofa
+      const kimmy = catStateRef.current.kimmy;
+      const other = seats.find((s) => s !== seat) ?? seat;
+      kimmy.targetX = other.x;
+      kimmy.targetY = other.y + 30;
+      kimmy.waitTimer = 4000;
+    }
+  }, []);
+
+  const openLaptopMenu = useCallback(
+    (item: HouseDialogueItem) => {
+      onOpenDialog({
+        speaker: item.speaker,
+        subtitle: item.room,
+        pages: item.pages,
+        choices: [
+          { id: "about", label: "💻 Lihat tentang Azzam" },
+          { id: "cancel", label: "✖ Batal" },
+        ],
+        onChoice: (id) => {
+          if (id === "about") onOpenDialog({ ...ABOUT_DIALOG });
+          else standUp();
+        },
+        onClose: standUp,
+      });
+    },
+    [onOpenDialog, standUp],
+  );
+
+  const interactWithFurniture = useCallback(
+    (item: HouseDialogueItem) => {
+      if (item.isExit) {
+        transitionToScene("town");
+        return;
+      }
+      sound.playBlip();
+      switch (item.action) {
+        case "sit":
+          sitOn(item);
+          return;
+        case "laptop":
+          sitOn(item);
+          openLaptopMenu(item);
+          return;
+        case "bed":
+          onOpenDialog({
+            speaker: item.speaker,
+            subtitle: item.room,
+            pages: item.pages,
+            choices: [
+              { id: "sleep", label: "💤 Tidur" },
+              { id: "bucket", label: "📝 Lihat Bucket List" },
+              { id: "cancel", label: "✖ Batal" },
+            ],
+            onChoice: (id) => {
+              if (id === "sleep") {
+                const p = playerRef.current;
+                p.pose = "sleep";
+                p.waving = false;
+                p.x = item.x;
+                p.y = item.y - 40;
+                seatRef.current = item;
+              } else if (id === "bucket") {
+                onOpenDialog({
+                  speaker: "📝 Bucket List Azzam",
+                  subtitle: "Ditempel di papan kepala kasur",
+                  pages: [
+                    `Hal-hal yang pengen aku lakuin & kunjungi:\n${BUCKET_LIST.map((b) => `☐ ${b}`).join("\n")}`,
+                  ],
+                  tags: ["Bucket List", "Goals"],
+                });
+              }
+            },
+          });
+          return;
+        default:
+          onOpenDialog({
+            speaker: item.speaker,
+            subtitle: item.room,
+            pages: item.pages,
+            tags: item.tags,
+            image: item.image,
+          });
+      }
+    },
+    [onOpenDialog, openLaptopMenu, sitOn, transitionToScene],
+  );
+
   const triggerInteract = useCallback(() => {
     sound.unlockAndStart();
     if (sceneRef.current === "town") {
@@ -231,20 +356,17 @@ export default function GameCanvas({
     }
 
     // Inside the house
+    const p = playerRef.current;
+    if (p.pose !== "stand") {
+      const seat = seatRef.current;
+      if (p.pose === "sit" && seat?.action === "laptop") openLaptopMenu(seat);
+      else standUp();
+      return;
+    }
     const target = nearestHouseRef.current;
     if (!target) return;
     if (target.kind === "furniture") {
-      if (target.item.isExit) {
-        transitionToScene("town");
-        return;
-      }
-      sound.playBlip();
-      onOpenDialog({
-        speaker: target.item.speaker,
-        subtitle: target.item.room,
-        pages: target.item.pages,
-        tags: target.item.tags,
-      });
+      interactWithFurniture(target.item);
     } else {
       sound.playMeow(target.cat.pitch);
       onOpenDialog({
@@ -254,12 +376,12 @@ export default function GameCanvas({
         tags: ["Cat Lover", target.cat.name],
       });
     }
-  }, [onOpenBuilding, onOpenDialog, transitionToScene]);
+  }, [interactWithFurniture, onOpenBuilding, onOpenDialog, openLaptopMenu, standUp, transitionToScene]);
 
   const startWave = useCallback(() => {
     sound.unlockAndStart();
     const p = playerRef.current;
-    if (p.waving) return;
+    if (p.waving || p.pose === "sleep") return;
     p.waving = true;
     p.waveTimer = 1400;
     p.anim = "wave";
@@ -304,7 +426,8 @@ export default function GameCanvas({
     const setKey = (e: KeyboardEvent, pressed: boolean) => {
       if (pressed) sound.unlockAndStart();
       if (!GAME_KEYS.has(e.key)) return;
-      if (overlayOpenRef.current) return;
+      // Key releases must still register, or a held key stays stuck after a dialog
+      if (overlayOpenRef.current && pressed) return;
       e.preventDefault();
       const input = inputRef.current;
       switch (e.key) {
@@ -380,6 +503,8 @@ export default function GameCanvas({
         return;
       }
 
+      if (playerRef.current.pose !== "stand") return;
+
       // Click on cats inside the house
       for (const cat of houseCats) {
         const st = catStateRef.current[cat.id];
@@ -396,32 +521,23 @@ export default function GameCanvas({
       }
 
       // Click on furniture inside the house
-      const hitF = [...houseFurniture]
-        .sort((a, b) => b.y - a.y)
+      const hitF = houseFurniture
+        .filter((f) => f.interactive !== false)
+        .sort((a, b) => (b.sortY ?? b.y) - (a.sortY ?? a.y))
         .find((f) => {
-          const left = f.x - f.width / 2 - 8;
-          const right = f.x + f.width / 2 + 8;
-          const top = f.y - f.height - 20;
-          const bottom = f.y + 8;
-          return mx >= left && mx <= right && my >= top && my <= bottom;
+          const r = getFurnitureRect(f);
+          return (
+            mx >= r.left - 4 &&
+            mx <= r.right + 4 &&
+            my >= furnitureTopY(f) &&
+            my <= r.bottom + 6
+          );
         });
-      if (hitF) {
-        if (hitF.isExit) {
-          transitionToScene("town");
-        } else {
-          sound.playBlip();
-          onOpenDialog({
-            speaker: hitF.speaker,
-            subtitle: hitF.room,
-            pages: hitF.pages,
-            tags: hitF.tags,
-          });
-        }
-      }
+      if (hitF) interactWithFurniture(hitF);
     };
     canvas.addEventListener("click", onClick);
     return () => canvas.removeEventListener("click", onClick);
-  }, [onOpenBuilding, onOpenDialog, transitionToScene]);
+  }, [interactWithFurniture, onOpenBuilding, onOpenDialog, transitionToScene]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -486,6 +602,13 @@ export default function GameCanvas({
         if (input.right || virt.right) dx += 1;
         if (input.up || virt.up) dy -= 1;
         if (input.down || virt.down) dy += 1;
+
+        if (player.pose !== "stand") {
+          // Any direction gets the player up; they start walking next frame
+          if (dx !== 0 || dy !== 0) standUp();
+          dx = 0;
+          dy = 0;
+        }
 
         if (dx !== 0 || dy !== 0) {
           const len = Math.hypot(dx, dy);
@@ -661,23 +784,27 @@ export default function GameCanvas({
 
         // Find nearest interactive target inside house (cat or furniture)
         let bestTarget: HouseTarget | null = null;
-        let bestDist = 76;
-
-        for (const cat of houseCats) {
-          const st = catStateRef.current[cat.id];
-          const d = Math.hypot(player.x - st.x, player.y - st.y);
-          if (d < bestDist) {
-            bestDist = d;
-            bestTarget = { kind: "cat", cat, state: st };
+        if (player.pose === "stand") {
+          let bestDist = 40;
+          for (const cat of houseCats) {
+            const st = catStateRef.current[cat.id];
+            const d = Math.hypot(player.x - st.x, player.y - st.y);
+            if (d < bestDist) {
+              bestDist = d;
+              bestTarget = { kind: "cat", cat, state: st };
+            }
           }
-        }
-
-        for (const f of houseFurniture) {
-          const d = Math.hypot(player.x - f.x, player.y - (f.y + 8));
-          const limit = Math.max(68, f.width * 0.62);
-          if (d < limit && d < bestDist) {
-            bestDist = d;
-            bestTarget = { kind: "furniture", item: f };
+          for (const f of houseFurniture) {
+            if (f.interactive === false) continue;
+            // Distance from the player's feet to the furniture footprint
+            const r = getFurnitureRect(f);
+            const ddx = Math.max(r.left - player.x, 0, player.x - r.right);
+            const ddy = Math.max(r.top - player.y, 0, player.y - r.bottom);
+            const d = Math.hypot(ddx, ddy) + 6;
+            if (d < bestDist) {
+              bestDist = d;
+              bestTarget = { kind: "furniture", item: f };
+            }
           }
         }
 
@@ -697,7 +824,7 @@ export default function GameCanvas({
         const hItems: HouseDrawItem[] = [
           ...houseFurniture.map((f, index) => ({
             kind: "furniture" as const,
-            sortY: f.isExit ? f.y - 40 : f.y,
+            sortY: f.sortY ?? f.y,
             index,
           })),
           ...houseCats.map((c, index) => ({
@@ -715,7 +842,11 @@ export default function GameCanvas({
               const f = houseFurniture[it.index];
               const isNear =
                 bestTarget?.kind === "furniture" && bestTarget.item.id === f.id;
-              drawFurnitureItem(worldCtx, f, isNear);
+              const onThis = seatRef.current?.id === f.id;
+              drawFurnitureItem(worldCtx, f, isNear, {
+                occupied: onThis && player.pose === "sit",
+                sleeping: onThis && player.pose === "sleep",
+              });
               break;
             }
             case "cat": {
@@ -728,20 +859,40 @@ export default function GameCanvas({
             }
             case "player":
               drawPlayer(worldCtx, player);
+              if (player.pose === "sit" && seatRef.current?.kind === "laptop_desk") {
+                drawDeskChairBack(worldCtx, seatRef.current);
+              }
               break;
           }
         }
 
-        if (bestTarget && !overlayOpenRef.current) {
-          if (bestTarget.kind === "furniture") {
+        if (player.pose === "sleep") {
+          ctx.fillStyle = "rgba(12, 14, 40, 0.42)";
+          ctx.fillRect(0, 0, viewW, viewH);
+        }
+
+        if (!overlayOpenRef.current) {
+          if (player.pose !== "stand") {
+            const seat = seatRef.current;
+            const text =
+              player.pose === "sleep"
+                ? "Zzz... tekan E / tombol arah untuk bangun"
+                : seat?.action === "laptop"
+                  ? "E: buka menu laptop · tombol arah: berdiri"
+                  : "E / tombol arah untuk berdiri";
+            // While sleeping, keep the hint below the bed so the face on the pillow stays visible
+            drawHint(ctx, player.x - cam.x, player.y - cam.y + (player.pose === "sleep" ? 72 : -52), text);
+          } else if (bestTarget?.kind === "furniture") {
             const f = bestTarget.item;
+            const verb =
+              f.action === "sit" ? "duduk" : f.action === "laptop" ? "duduk di laptop" : f.action === "bed" ? "kasur" : f.name;
             drawHint(
               ctx,
               f.x - cam.x,
-              f.y - f.height - cam.y - 16,
-              f.isExit ? "E / klik untuk keluar rumah" : `E / klik: ${f.name}`,
+              furnitureTopY(f) - cam.y - 4,
+              f.isExit ? "E / klik untuk keluar rumah" : `E / klik: ${verb}`,
             );
-          } else {
+          } else if (bestTarget?.kind === "cat") {
             const st = bestTarget.state;
             drawHint(
               ctx,
@@ -766,7 +917,7 @@ export default function GameCanvas({
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
     };
-  }, [onNearestLabelChange, onPlayerPos, startWave, transitionToScene, triggerInteract]);
+  }, [onNearestLabelChange, onPlayerPos, standUp, startWave, transitionToScene, triggerInteract]);
 
   return (
     <canvas

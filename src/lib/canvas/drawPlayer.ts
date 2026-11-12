@@ -8,7 +8,10 @@ export function drawPlayer(w: WorldRenderContext, player: PlayerState): void {
   const x = player.x - cameraX;
   const y = player.y - cameraY;
   if (x < -60 || y < -90 || x > w.viewW + 60 || y > w.viewH + 60) return;
+  // Sleeping is drawn by the bed itself
+  if (player.pose === "sleep") return;
 
+  const sitting = player.pose === "sit";
   drawCharacter(ctx, x, y, PLAYER_LOOK, {
     facing: player.facing,
     moving: player.anim === "walk",
@@ -16,10 +19,11 @@ export function drawPlayer(w: WorldRenderContext, player: PlayerState): void {
     waving: player.waving,
     waveTime: player.animTime,
     time,
+    sitting,
   });
 
   if (player.waving) {
-    drawSpeechBubble(ctx, x, y - 60, "Halo, selamat datang!", time);
+    drawSpeechBubble(ctx, x, y - (sitting ? 54 : 60), "Halo, selamat datang!", time);
   }
 }
 

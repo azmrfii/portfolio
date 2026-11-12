@@ -1,5 +1,6 @@
 export type PlayerAnim = "idle" | "walk" | "wave";
 export type Facing = "down" | "up" | "left" | "right";
+export type PlayerPose = "stand" | "sit" | "sleep";
 
 export interface PlayerState {
   x: number;
@@ -7,6 +8,7 @@ export interface PlayerState {
   vx: number;
   vy: number;
   facing: Facing;
+  pose: PlayerPose;
   anim: PlayerAnim;
   animTime: number;
   waving: boolean;

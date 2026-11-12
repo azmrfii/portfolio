@@ -1,39 +1,70 @@
+import type { Facing } from "@/lib/canvas/types";
+
 export type FurnitureKind =
   | "bed"
-  | "pc_desk"
+  | "nightstand"
   | "bookshelf"
-  | "corkboard"
-  | "console_tv"
-  | "guitar"
+  | "laptop_desk"
+  | "valorant_setup"
+  | "music_corner"
   | "photo_wall"
-  | "sports_rack"
-  | "sofa_table"
+  | "family_photo"
+  | "sofa"
+  | "coffee_table"
   | "trophy_case"
-  | "family_frame"
-  | "plant"
   | "phone_table"
-  | "kitchen_counter"
-  | "fridge"
-  | "dining_table"
+  | "plant"
+  | "dumbbell_rack"
+  | "bench_press"
+  | "treadmill"
   | "doormat";
+
+export type RoomName = "Kamar Tidur" | "Ruang Hobi" | "Ruang Tamu" | "Ruang Gym";
+
+/** What pressing E on a piece of furniture does besides showing its dialog */
+export type FurnitureAction = "sit" | "bed" | "laptop";
+
+export interface SeatSpot {
+  x: number;
+  y: number;
+  facing: Facing;
+}
 
 export interface HouseDialogueItem {
   id: string;
   kind: FurnitureKind;
   name: string;
-  room: "Kamar & Workspace" | "Ruang Hobi" | "Ruang Tamu" | "Dapur";
-  /** Center X and bottom (ground) Y of the furniture */
+  room: RoomName;
+  /** Center X and bottom (front edge) Y of the floor footprint */
   x: number;
   y: number;
   width: number;
+  /** Depth of the floor footprint (top = y - height) */
   height: number;
   /** Whether the player collides with this item */
   solid: boolean;
-  /** RPG dialog pages shown when inspected */
+  /** Draw order override (defaults to y) */
+  sortY?: number;
+  /** Set to false for pure decoration */
+  interactive?: boolean;
+  action?: FurnitureAction;
+  seats?: SeatSpot[];
+  /** Where the player stands after getting up */
+  standSpot?: { x: number; y: number };
   speaker: string;
   pages: string[];
   tags?: string[];
+  image?: { src: string; alt: string };
   isExit?: boolean;
+}
+
+export interface CatPatch {
+  part: "body" | "head";
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  color: string;
 }
 
 export interface CatData {
@@ -41,7 +72,14 @@ export interface CatData {
   name: string;
   gender: "jantan" | "betina";
   coat: string;
-  secondaryCoat: string;
+  /** Chest, belly & paw color */
+  belly: string;
+  /** Lower face color (bicolor muzzle) */
+  muzzle?: string;
+  patches: CatPatch[];
+  earColors: [string, string];
+  tailColor: string;
+  tailTip?: string;
   earInner: string;
   eyeColor: string;
   collarColor: string;
@@ -62,360 +100,402 @@ export const HOUSE_SPAWN = { x: 460, y: 555 };
 /** Where the player returns in town when stepping out of the house */
 export const TOWN_HOUSE_DOOR = { x: 140, y: 280 };
 
-/** Interior rooms (for floor coloring & labels) */
+/** Drop the PNG here: public/images/family-photo.png */
+export const FAMILY_PHOTO_SRC = "/images/family-photo.png";
+
+export const BUCKET_LIST = [
+  "Ke Bandung",
+  "Ke Jepang",
+  "Lulus tepat waktu (cumlaude di semester 7)",
+];
+
+export const WORK_PLAYLIST = ["Magnolia", "Losing Us", "Apa Kabarmu?"];
+
 export interface RoomRect {
   id: string;
-  label: string;
+  label: RoomName;
   x: number;
   y: number;
   w: number;
   h: number;
-  floor: "wood" | "warm_wood" | "tile" | "rug_room";
+  /** Height of the back wall face drawn at the top of the room */
+  wall: number;
+  floor: "wood" | "dark_wood" | "warm_wood" | "gym";
+  wallpaper: "bedroom" | "hobby" | "living" | "gym";
+  labelPos: { x: number; y: number };
 }
 
 export const HOUSE_ROOMS: RoomRect[] = [
   {
-    id: "workspace",
-    label: "Kamar & Workspace",
-    x: 40,
-    y: 50,
-    w: 410,
-    h: 265,
+    id: "bedroom",
+    label: "Kamar Tidur",
+    x: 44,
+    y: 54,
+    w: 402,
+    h: 258,
+    wall: 46,
     floor: "wood",
+    wallpaper: "bedroom",
+    labelPos: { x: 340, y: 296 },
   },
   {
     id: "hobby",
-    label: "Ruang Hobi (Game · Musik · Foto · Olahraga)",
+    label: "Ruang Hobi",
     x: 460,
-    y: 50,
-    w: 420,
-    h: 265,
-    floor: "warm_wood",
+    y: 54,
+    w: 416,
+    h: 258,
+    wall: 46,
+    floor: "dark_wood",
+    wallpaper: "hobby",
+    labelPos: { x: 540, y: 296 },
   },
   {
     id: "living",
     label: "Ruang Tamu",
-    x: 40,
-    y: 325,
-    w: 540,
-    h: 275,
-    floor: "rug_room",
+    x: 44,
+    y: 328,
+    w: 536,
+    h: 272,
+    wall: 40,
+    floor: "warm_wood",
+    wallpaper: "living",
+    labelPos: { x: 300, y: 586 },
   },
   {
-    id: "kitchen",
-    label: "Dapur & Ruang Makan",
-    x: 590,
-    y: 325,
-    w: 290,
-    h: 275,
-    floor: "tile",
+    id: "gym",
+    label: "Ruang Gym",
+    x: 594,
+    y: 328,
+    w: 282,
+    h: 272,
+    wall: 40,
+    floor: "gym",
+    wallpaper: "gym",
+    labelPos: { x: 680, y: 586 },
   },
 ];
 
-/** Interior partition wall segments (x, y, w, h) with doorways left open */
+/** Wall caps (x, y, w, h); doorway gaps are left open */
 export const HOUSE_WALLS: { x: number; y: number; w: number; h: number }[] = [
-  // Top & bottom outer walls
+  // Top & bottom outer walls (front door gap x 405..515)
   { x: 30, y: 20, w: 860, h: 34 },
   { x: 30, y: 600, w: 375, h: 20 },
   { x: 515, y: 600, w: 375, h: 20 },
   // Left & right outer walls
-  { x: 30, y: 20, w: 14, h: 595 },
-  { x: 876, y: 20, w: 14, h: 595 },
-  // Vertical divider between Kamar/Workspace and Ruang Hobi (doorway gap y: 185..245)
-  { x: 446, y: 50, w: 14, h: 135 },
-  { x: 446, y: 245, w: 14, h: 75 },
-  // Horizontal divider between top rooms and bottom rooms (two doorway gaps)
-  { x: 40, y: 312, w: 155, h: 16 },
+  { x: 30, y: 20, w: 14, h: 600 },
+  { x: 876, y: 20, w: 14, h: 600 },
+  // Kamar Tidur | Ruang Hobi (doorway y 185..245)
+  { x: 446, y: 54, w: 14, h: 131 },
+  { x: 446, y: 245, w: 14, h: 67 },
+  // Top rooms | bottom rooms (doorways x 195..265 and x 600..670)
+  { x: 30, y: 312, w: 165, h: 16 },
   { x: 265, y: 312, w: 335, h: 16 },
-  { x: 670, y: 312, w: 210, h: 16 },
-  // Vertical divider between Ruang Tamu and Dapur (doorway gap y: 440..515)
-  { x: 580, y: 325, w: 14, h: 115 },
+  { x: 670, y: 312, w: 220, h: 16 },
+  // Ruang Tamu | Ruang Gym (doorway y 440..515)
+  { x: 580, y: 328, w: 14, h: 112 },
   { x: 580, y: 515, w: 14, h: 85 },
 ];
 
+/** Openings between rooms; they also cut through back wall faces */
+export const HOUSE_DOORWAYS: { x: number; y: number; w: number; h: number }[] = [
+  { x: 195, y: 312, w: 70, h: 56 },
+  { x: 600, y: 312, w: 70, h: 56 },
+  { x: 446, y: 185, w: 14, h: 60 },
+  { x: 580, y: 440, w: 14, h: 75 },
+];
+
+const ABOUT_PAGES = [
+  "Kenalin, aku Azzam — seorang engineer lulusan Universitas Telkom yang saat ini berkarier di PT. Adidata Informatika.",
+  "Perjalanan pendidikanku dimulai dari TK Ar Rofa, SD Fathan Mubina, SMP Roudlotul Jannah, lalu SMA/K di Wikrama Garut (tahun ke-1) & Farmako Medika Plus (tahun ke-2 & 3).",
+  "Sehari-hari aku ngoding pakai TypeScript, React, Next.js, Tailwind CSS, Node.js, dan Git — plus suka eksplorasi UI/UX interaktif kayak portfolio ini.",
+  "Silakan keliling rumah ini buat kenal lebih dekat soal hobi, bucket list, dan ketiga kucing kesayanganku: Gray Pi, Kimmy, dan Boba!",
+];
+
+export const ABOUT_DIALOG = {
+  speaker: "💻 Tentang Azzam",
+  subtitle: "Kamar Tidur · Laptop",
+  pages: ABOUT_PAGES,
+  tags: ["About Me", "Next.js", "TypeScript", "React"],
+};
+
 export const houseFurniture: HouseDialogueItem[] = [
-  // ==================== KAMAR & WORKSPACE ====================
+  // ==================== KAMAR TIDUR ====================
   {
-    id: "pc_desk",
-    kind: "pc_desk",
-    name: "Meja Kerja & Dual Monitor Setup",
-    room: "Kamar & Workspace",
-    x: 135,
-    y: 122,
-    width: 110,
-    height: 46,
+    id: "bed",
+    kind: "bed",
+    name: "Kasur & Papan Bucket List",
+    room: "Kamar Tidur",
+    x: 100,
+    y: 214,
+    width: 80,
+    height: 114,
     solid: true,
-    speaker: "💻 Meja Kerja & PC Setup",
-    pages: [
-      "Di sinilah baris demi baris kode ditulis setiap hari — ditemani secangkir kopi hangat dan playlist favorit.",
-      "Stack & tools sehari-hari: TypeScript, React, Next.js, Tailwind CSS, Node.js, Git, serta eksplorasi UI/UX interaktif.",
-      "(Placeholder: kamu bisa edit bagian ini di src/data/houseData.ts untuk menambahkan spesifikasi setup atau workflow favoritmu!)",
-    ],
-    tags: ["Next.js", "TypeScript", "React", "UI/UX"],
+    action: "bed",
+    standSpot: { x: 158, y: 196 },
+    speaker: "🛏️ Kasur Azzam",
+    pages: ["Kasurnya empuk banget. Di papan kepala kasur ada bucket list yang ditempel."],
+  },
+  {
+    id: "nightstand",
+    kind: "nightstand",
+    name: "Meja Lampu",
+    room: "Kamar Tidur",
+    x: 162,
+    y: 128,
+    width: 28,
+    height: 28,
+    solid: true,
+    interactive: false,
+    speaker: "",
+    pages: [],
   },
   {
     id: "bookshelf",
     kind: "bookshelf",
-    name: "Rak Buku & Referensi",
-    room: "Kamar & Workspace",
-    x: 275,
-    y: 108,
-    width: 78,
-    height: 42,
+    name: "Rak Buku",
+    room: "Kamar Tidur",
+    x: 232,
+    y: 118,
+    width: 70,
+    height: 18,
     solid: true,
-    speaker: "📚 Rak Buku & Catatan",
+    speaker: "📚 Rak Buku",
     pages: [
       "Kumpulan buku software engineering, desain produk, pengembangan diri, dan beberapa komik favorit.",
-      "Selalu senang mempelajari hal baru — mulai dari arsitektur frontend hingga cara membuat web terasa hidup seperti game.",
+      "Selalu senang mempelajari hal baru — mulai dari arsitektur frontend sampai cara bikin web terasa hidup kayak game.",
     ],
     tags: ["Clean Code", "Design", "Lifelong Learner"],
   },
   {
-    id: "corkboard",
-    kind: "corkboard",
-    name: "Papan Target & Ide",
-    room: "Kamar & Workspace",
-    x: 382,
-    y: 96,
-    width: 58,
-    height: 28,
-    solid: false,
-    speaker: "📌 Papan Visi & Goals",
-    pages: [
-      "Penuh sticky notes berisi ide side-project, target karier, dan daftar tempat yang ingin dikunjungi.",
-      "Prinsip kerja: selesaikan satu per satu dengan rapi, konsisten, dan berdampak nyata buat pengguna.",
-    ],
-    tags: ["Goals", "Roadmap", "Product Craft"],
-  },
-  {
-    id: "bed",
-    kind: "bed",
-    name: "Kasur Nyaman",
-    room: "Kamar & Workspace",
-    x: 108,
-    y: 255,
-    width: 82,
-    height: 64,
+    id: "laptop_desk",
+    kind: "laptop_desk",
+    name: "Meja Laptop",
+    room: "Kamar Tidur",
+    x: 352,
+    y: 176,
+    width: 104,
+    height: 76,
     solid: true,
-    speaker: "🛏️ Kasur Kesayangan",
-    pages: [
-      "Zzz... kelihatannya empuk banget, apalagi kadang direbut sama Gray Pi, Kimmy, dan Boba.",
-      "Tapi belum waktunya tidur! Masih banyak sudut rumah dan kota yang bisa dijelajahi.",
-    ],
-    tags: ["Rest", "Recharge"],
+    sortY: 142,
+    action: "laptop",
+    seats: [{ x: 352, y: 170, facing: "up" }],
+    standSpot: { x: 352, y: 192 },
+    speaker: "💻 Laptop Azzam",
+    pages: ["Duduk dulu di depan laptop... Mau ngapain?"],
   },
 
   // ==================== RUANG HOBI ====================
   {
-    id: "console_tv",
-    kind: "console_tv",
-    name: "Pojok Gaming & Konsol",
+    id: "valorant_setup",
+    kind: "valorant_setup",
+    name: "Setup Gaming (Valorant)",
     room: "Ruang Hobi",
-    x: 545,
-    y: 120,
-    width: 112,
-    height: 48,
+    x: 560,
+    y: 176,
+    width: 120,
+    height: 76,
     solid: true,
+    sortY: 142,
     speaker: "🎮 Hobi: Gaming",
     pages: [
-      "Tempat melepas penat lewat petualangan RPG, game strategi, dan co-op bareng teman-teman.",
-      "Dari game juga muncul inspirasi untuk membuat portfolio interaktif bergaya pixel town ini!",
-      "(Placeholder: tulis judul game favoritmu di sini — misalnya RPG, indie, atau kompetitif favoritmu.)",
+      "Game yang lagi sering aku mainin sekarang: VALORANT!",
+      "Seru banget buat ngelatih fokus, komunikasi tim, dan ambil keputusan cepat — mirip kerja bareng tim developer.",
     ],
-    tags: ["Gaming", "RPG", "Interactive Media"],
+    tags: ["Valorant", "FPS", "Team Play"],
   },
   {
-    id: "guitar",
-    kind: "guitar",
-    name: "Gitar Akustik & Speaker Musik",
+    id: "music_corner",
+    kind: "music_corner",
+    name: "Pojok Musik",
     room: "Ruang Hobi",
-    x: 680,
-    y: 122,
-    width: 68,
-    height: 44,
+    x: 712,
+    y: 138,
+    width: 92,
+    height: 38,
     solid: true,
-    speaker: "🎸 Hobi: Musik",
+    speaker: "🎧 Hobi: Musik",
     pages: [
-      "Musik selalu jadi teman setia waktu ngoding fokus maupun saat santai sore hari.",
-      "Kadang petik gitar akustik atau dengerin playlist lintas genre untuk menjaga mood tetap asik.",
-      "(Placeholder: tambahkan band, musisi, atau lagu favoritmu di src/data/houseData.ts!)",
+      "Selera musikku ngikutin mood hati — hari ini bisa mellow, besok bisa semangat.",
+      `Tapi kalau lagi kerja, lagu yang paling sering aku putar: ${WORK_PLAYLIST.join(", ")}.`,
     ],
-    tags: ["Music", "Acoustic", "Good Vibes"],
+    tags: WORK_PLAYLIST,
   },
   {
     id: "photo_wall",
     kind: "photo_wall",
-    name: "Dinding Galeri & Kamera Analog/Mirrorless",
+    name: "Kamera & Galeri",
     room: "Ruang Hobi",
-    x: 805,
-    y: 118,
-    width: 96,
-    height: 44,
+    x: 826,
+    y: 134,
+    width: 76,
+    height: 34,
     solid: true,
-    speaker: "📷 Hobi: Fotografi & Kenangan",
+    speaker: "📷 Hobi: Fotografi",
     pages: [
       "\"Bagi gw, foto itu kenangan ketika kita ga bisa kembali ke masa lalu.\"",
-      "Setiap bingkai di dinding ini menyimpan cerita: perjalanan, tawa teman-teman, keluarga, dan momen kecil yang berharga.",
-      "Kamera selalu siap di meja untuk mengabadikan detik-detik yang tidak akan terulang dua kali.",
+      "Kamera selalu siap buat mengabadikan momen yang nggak akan terulang dua kali.",
     ],
-    tags: ["Photography", "Memories", "Storytelling"],
-  },
-  {
-    id: "sports_rack",
-    kind: "sports_rack",
-    name: "Rak Alat Olahraga",
-    room: "Ruang Hobi",
-    x: 815,
-    y: 258,
-    width: 86,
-    height: 44,
-    solid: true,
-    speaker: "⚽ Hobi: Olahraga",
-    pages: [
-      "Supaya badan tetap bugar setelah seharian duduk di depan layar monitor!",
-      "Rutin olahraga bikin pikiran lebih segar, fokus terjaga, dan energi selalu siap buat tantangan baru.",
-      "(Placeholder: sebutkan olahraga favoritmu — futsal, badminton, lari, gym, atau bersepeda!)",
-    ],
-    tags: ["Sports", "Healthy Mind", "Active"],
+    tags: ["Photography", "Memories"],
   },
 
   // ==================== RUANG TAMU ====================
   {
-    id: "family_frame",
-    kind: "family_frame",
-    name: "Bingkai Profil & Tentang Azzam",
+    id: "family_photo",
+    kind: "family_photo",
+    name: "Foto Keluarga",
     room: "Ruang Tamu",
-    x: 135,
-    y: 356,
+    x: 122,
+    y: 372,
     width: 84,
-    height: 26,
+    height: 6,
     solid: false,
-    speaker: "🖼️ Halo! Selamat Datang di Rumah Azzam",
-    pages: [
-      "Kenalin, aku Azzam — seorang engineer lulusan Universitas Telkom yang saat ini berkarier di PT. Adidata Informatika.",
-      "Perjalanan pendidikanku dimulai dari TK Ar Rofa, SD Fathan Mubina, SMP Roudlotul Jannah, lalu SMA/K di Wikrama Garut (tahun ke-1) & Farmako Medika Plus (tahun ke-2 & 3).",
-      "Silakan keliling rumah ini untuk kenal lebih dekat soal hobi, keseharian, dan ketiga kucing kesayanganku: Gray Pi, Kimmy, dan Boba!",
-    ],
-    tags: ["About Me", "Azzam", "Welcome"],
+    speaker: "🖼️ Foto Keluarga",
+    pages: ["Foto keluarga tercinta — orang-orang yang selalu jadi alasan buat terus berkembang."],
+    tags: ["Family"],
+    image: { src: FAMILY_PHOTO_SRC, alt: "Foto keluarga Azzam" },
   },
   {
-    id: "sofa_table",
-    kind: "sofa_table",
-    name: "Sofa Ruang Tamu & Meja Kopi",
+    id: "sofa",
+    kind: "sofa",
+    name: "Sofa Ruang Tamu",
     room: "Ruang Tamu",
-    x: 295,
-    y: 455,
-    width: 146,
-    height: 68,
+    x: 340,
+    y: 418,
+    width: 150,
+    height: 50,
     solid: true,
-    speaker: "🛋️ Sofa Ruang Tamu",
-    pages: [
-      "Spot paling nyaman buat ngobrol santai, nonton film/series akhir pekan, atau main sama kucing-kucing.",
-      "Kalau kamu mampir ke sini, anggap saja rumah sendiri!",
+    action: "sit",
+    seats: [
+      { x: 306, y: 420, facing: "down" },
+      { x: 374, y: 420, facing: "down" },
     ],
-    tags: ["Cozy", "Living Room"],
+    standSpot: { x: 340, y: 446 },
+    speaker: "🛋️ Sofa",
+    pages: [],
+  },
+  {
+    id: "coffee_table",
+    kind: "coffee_table",
+    name: "Meja Kopi",
+    room: "Ruang Tamu",
+    x: 340,
+    y: 486,
+    width: 92,
+    height: 30,
+    solid: true,
+    interactive: false,
+    speaker: "",
+    pages: [],
   },
   {
     id: "trophy_case",
     kind: "trophy_case",
-    name: "Lemari Pajangan & Pencapaian",
+    name: "Lemari Pajangan Karier",
     room: "Ruang Tamu",
-    x: 495,
-    y: 372,
-    width: 82,
-    height: 44,
+    x: 516,
+    y: 392,
+    width: 72,
+    height: 22,
     solid: true,
-    speaker: "🏆 Lemari Pajangan & Perjalanan Karier",
+    speaker: "🏆 Perjalanan Karier",
     pages: [
-      "Menyimpan kenang-kenangan perjalanan karier: mulai dari CV Sinang Permata Group, PT. Geomatika Satelit Indonesia, hingga PT. Adidata Informatika saat ini.",
+      "Kenang-kenangan perjalanan karier: CV Sinang Permata Group, PT. Geomatika Satelit Indonesia, hingga PT. Adidata Informatika saat ini.",
       "Setiap tempat memberikan pelajaran berharga tentang kolaborasi tim, kualitas kode, dan membangun produk yang bermanfaat.",
     ],
-    tags: ["Milestones", "Career", "Achievement"],
+    tags: ["Career", "Milestones"],
   },
   {
     id: "phone_table",
     kind: "phone_table",
-    name: "Meja Telepon & Buku Tamu (Kontak)",
+    name: "Meja Telepon (Kontak)",
     room: "Ruang Tamu",
-    x: 115,
-    y: 535,
-    width: 72,
-    height: 44,
+    x: 82,
+    y: 578,
+    width: 52,
+    height: 30,
     solid: true,
     speaker: "☎️ Kontak & Kolaborasi",
     pages: [
-      "Tertarik berdiskusi, kolaborasi proyek seru, atau sekadar menyapa? Jangan ragu untuk menghubungi!",
-      "(Placeholder: tambahkan link Email, LinkedIn, GitHub, dan Instagram kamu di src/data/houseData.ts.)",
+      "Tertarik diskusi, kolaborasi proyek, atau sekadar menyapa? Jangan ragu buat menghubungi!",
+      "(Placeholder: tambahkan link Email, LinkedIn, GitHub, dan Instagram di src/data/houseData.ts.)",
     ],
     tags: ["Contact", "GitHub", "LinkedIn", "Email"],
   },
   {
     id: "plant",
     kind: "plant",
-    name: "Tanaman Monstera & Pojok Hijau",
+    name: "Tanaman Monstera",
     room: "Ruang Tamu",
-    x: 525,
-    y: 552,
-    width: 44,
-    height: 44,
+    x: 556,
+    y: 590,
+    width: 32,
+    height: 22,
     solid: true,
-    speaker: "🪴 Tanaman Sudut Ruang",
-    pages: [
-      "Sedikit sentuhan hijau di dalam rumah biar suasana tetap adem dan segar.",
-      "Untungnya Gray Pi, Kimmy, dan Boba jarang iseng gigitin daunnya!",
-    ],
+    interactive: false,
+    speaker: "",
+    pages: [],
+  },
+  {
+    id: "plant_corner",
+    kind: "plant",
+    name: "Tanaman Sudut",
+    room: "Ruang Tamu",
+    x: 62,
+    y: 392,
+    width: 32,
+    height: 22,
+    solid: true,
+    interactive: false,
+    speaker: "",
+    pages: [],
   },
 
-  // ==================== DAPUR & RUANG MAKAN ====================
+  // ==================== RUANG GYM ====================
   {
-    id: "kitchen_counter",
-    kind: "kitchen_counter",
-    name: "Meja Dapur & Pojok Kopi",
-    room: "Dapur",
-    x: 700,
-    y: 375,
-    width: 124,
-    height: 44,
+    id: "dumbbell_rack",
+    kind: "dumbbell_rack",
+    name: "Rak Dumbbell",
+    room: "Ruang Gym",
+    x: 776,
+    y: 394,
+    width: 100,
+    height: 24,
     solid: true,
-    speaker: "☕ Dapur & Coffee Corner",
-    pages: [
-      "Tempat meracik kopi atau teh hangat sebelum mulai ngoding, plus menyiapkan camilan favorit.",
-      "Di sudut bawah juga ada mangkuk makan khusus buat Gray Pi, Kimmy, dan Boba.",
-    ],
-    tags: ["Coffee", "Snacks"],
+    speaker: "🏋️ Rak Dumbbell",
+    pages: ["Dumbbell dari yang ringan sampai berat — buat latihan tangan, bahu, dan punggung."],
+    tags: ["Gym", "Strength"],
   },
   {
-    id: "fridge",
-    kind: "fridge",
-    name: "Kulkas Penuh Stok",
-    room: "Dapur",
-    x: 818,
-    y: 375,
-    width: 52,
-    height: 50,
-    solid: true,
-    speaker: "🧊 Kulkas Rumah",
-    pages: [
-      "Isinya minuman dingin, bahan masakan, dan tentu saja stok wet food kesukaan tiga kucing di rumah ini!",
-    ],
-    tags: ["Treats", "Fresh"],
-  },
-  {
-    id: "dining_table",
-    kind: "dining_table",
-    name: "Meja Makan Hangat",
-    room: "Dapur",
-    x: 745,
-    y: 515,
+    id: "bench_press",
+    kind: "bench_press",
+    name: "Bench Press",
+    room: "Ruang Gym",
+    x: 730,
+    y: 506,
     width: 112,
-    height: 62,
+    height: 46,
     solid: true,
-    speaker: "🍽️ Meja Makan",
+    speaker: "💪 Hobi: Gym",
     pages: [
-      "Tempat menikmati makanan favorit sambil istirahat sejenak dari layar.",
-      "(Placeholder: tulis makanan dan minuman favoritmu di sini!)",
+      "Olahraga favoritku: GYM!",
+      "Biar badan tetap bugar setelah seharian duduk di depan layar — dan pikiran jadi lebih segar buat ngoding lagi.",
     ],
-    tags: ["Foodie", "Break Time"],
+    tags: ["Gym", "Healthy Mind", "Consistency"],
+  },
+  {
+    id: "treadmill",
+    kind: "treadmill",
+    name: "Treadmill",
+    room: "Ruang Gym",
+    x: 842,
+    y: 588,
+    width: 44,
+    height: 96,
+    solid: true,
+    speaker: "🏃 Treadmill",
+    pages: ["Pemanasan dulu sebelum angkat beban, atau cardio santai sambil dengerin playlist."],
+    tags: ["Cardio"],
   },
 
   // ==================== PINTU KELUAR ====================
@@ -429,48 +509,66 @@ export const houseFurniture: HouseDialogueItem[] = [
     width: 96,
     height: 30,
     solid: false,
+    sortY: 0,
     speaker: "🚪 Pintu Depan",
     pages: ["Kembali keluar menuju halaman kota."],
     isExit: true,
   },
 ];
 
+const WHITE = "#fbf8f2";
+const GRAY = "#8c929b";
+const CREAM = "#e9c48f";
+
 export const houseCats: CatData[] = [
   {
     id: "graypi",
     name: "Gray Pi",
     gender: "jantan",
-    coat: "#7d8590",
-    secondaryCoat: "#cbd5e1",
+    coat: GRAY,
+    belly: WHITE,
+    muzzle: WHITE,
+    patches: [],
+    earColors: [GRAY, GRAY],
+    tailColor: GRAY,
+    tailTip: WHITE,
     earInner: "#f4afb4",
-    eyeColor: "#fbbf24",
+    eyeColor: "#a3c94a",
     collarColor: "#2563eb",
-    homeX: 225,
-    homeY: 225,
-    roamRadius: 75,
+    homeX: 250,
+    homeY: 236,
+    roamRadius: 70,
     pitch: 0.88,
-    meows: ["Meong~ 🐾", "Prrr... (Gray Pi)", "Miaw!"],
+    meows: ["Meong~ 🐾", "Prrr...", "Miaw!"],
     pages: [
-      "🐾 Gray Pi (Kucing Jantan) — Si ganteng berbulu abu-abu yang kalem tapi suka penasaran kalau Azzam lagi ngetik di meja kerja.",
-      "Gray Pi paling hobi rebahan di dekat meja PC sambil dengerin suara keyboard!",
+      "🐾 Gray Pi (Kucing Jantan) — Si ganteng berbulu abu-abu putih yang kalem tapi suka penasaran kalau Azzam lagi ngetik di laptop.",
+      "Gray Pi paling hobi rebahan di karpet kamar sambil dengerin suara keyboard!",
     ],
   },
   {
     id: "kimmy",
     name: "Kimmy",
     gender: "betina",
-    coat: "#f8fafc",
-    secondaryCoat: "#f59e0b",
+    coat: WHITE,
+    belly: WHITE,
+    patches: [
+      { part: "body", x: -1, y: -3, rx: 8, ry: 4.5, color: CREAM },
+      { part: "body", x: -10, y: -1, rx: 5, ry: 6, color: GRAY },
+      { part: "head", x: -3, y: -5, rx: 6, ry: 4.5, color: GRAY },
+      { part: "head", x: 5, y: -6, rx: 3.5, ry: 3, color: CREAM },
+    ],
+    earColors: [GRAY, CREAM],
+    tailColor: GRAY,
     earInner: "#fda4af",
     eyeColor: "#38bdf8",
     collarColor: "#ec4899",
-    homeX: 430,
-    homeY: 465,
-    roamRadius: 85,
+    homeX: 230,
+    homeY: 500,
+    roamRadius: 80,
     pitch: 1.18,
-    meows: ["Miuw~ 💕", "Meow! (Kimmy)", "Purrr~"],
+    meows: ["Miuw~ 💕", "Meow!", "Purrr~"],
     pages: [
-      "🐾 Kimmy (Kucing Betina) — Si manis yang lincah, ramah, dan paling suka nyamperin siapa pun yang duduk di sofa ruang tamu.",
+      "🐾 Kimmy (Kucing Betina) — Si manis tiga warna: cream, putih, dan abu. Lincah, ramah, dan paling suka nyamperin siapa pun yang duduk di sofa.",
       "Kalau dielus, Kimmy langsung purring kencang dan berguling manja!",
     ],
   },
@@ -478,50 +576,72 @@ export const houseCats: CatData[] = [
     id: "boba",
     name: "Boba",
     gender: "betina",
-    coat: "#d6a77a",
-    secondaryCoat: "#5c3a21",
+    coat: WHITE,
+    belly: WHITE,
+    patches: [
+      { part: "body", x: 1, y: -3.5, rx: 8, ry: 4.5, color: GRAY },
+      { part: "body", x: -9, y: -1, rx: 5, ry: 5.5, color: CREAM },
+      { part: "head", x: -3, y: -5, rx: 5, ry: 4.5, color: CREAM },
+      { part: "head", x: 4.5, y: -5.5, rx: 3.5, ry: 3, color: GRAY },
+    ],
+    earColors: [CREAM, GRAY],
+    tailColor: CREAM,
     earInner: "#f9a8d4",
-    eyeColor: "#4ade80",
+    eyeColor: "#e0a83a",
     collarColor: "#a855f7",
-    homeX: 655,
-    homeY: 455,
+    homeX: 680,
+    homeY: 250,
     roamRadius: 75,
     pitch: 1.08,
-    meows: ["Meow~ 🧋", "Nyaa! (Boba)", "Prrr~"],
+    meows: ["Meow~ 🧋", "Nyaa!", "Prrr~"],
     pages: [
-      "🐾 Boba (Kucing Betina) — Warnanya manis seperti milk tea boba! Paling sigap kalau dengar suara kulkas atau mangkuk makan di dapur.",
-      "Boba suka jalan-jalan santai keliling ruang hobi dan dapur sambil menggoyangkan ekornya.",
+      "🐾 Boba (Kucing Betina) — Kembaran warna Kimmy: cream, putih, dan abu! Bedanya, Boba lebih banyak abu di punggungnya.",
+      "Boba suka nongkrong di ruang hobi, apalagi kalau speaker lagi muter lagu.",
     ],
   },
 ];
 
+export function getFurnitureRect(f: HouseDialogueItem) {
+  return {
+    left: f.x - f.width / 2,
+    right: f.x + f.width / 2,
+    top: f.y - f.height,
+    bottom: f.y,
+  };
+}
+
+function inDoorway(x: number, y: number): boolean {
+  return HOUSE_DOORWAYS.some(
+    (d) => x > d.x + 8 && x < d.x + d.w - 8 && y >= d.y - 6 && y <= d.y + d.h + 8,
+  );
+}
+
 export function isHouseBlocked(x: number, y: number): boolean {
-  // Outer bounds
-  if (x < 52 || x > HOUSE_WIDTH - 52 || y < 68 || y > HOUSE_HEIGHT - 44) {
-    // Allow stepping onto the doormat area near the exit
+  if (x < 52 || x > HOUSE_WIDTH - 52 || y > HOUSE_HEIGHT - 44) {
     const nearExit = Math.abs(x - 460) < 42 && y >= 540 && y <= 604;
     if (!nearExit) return true;
   }
 
-  // Interior walls
   for (const w of HOUSE_WALLS) {
     if (x > w.x - 10 && x < w.x + w.w + 10 && y > w.y - 4 && y < w.y + w.h + 10) {
       return true;
     }
   }
 
-  // Solid furniture footprints
+  // Back wall faces at the top of each room
+  for (const r of HOUSE_ROOMS) {
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y < r.y + r.wall + 8 && !inDoorway(x, y)) {
+      return true;
+    }
+  }
+
   for (const f of houseFurniture) {
     if (!f.solid) continue;
-    const left = f.x - f.width / 2 - 8;
-    const right = f.x + f.width / 2 + 8;
-    const top = f.y - f.height + 8;
-    const bottom = f.y + 6;
-    if (x > left && x < right && y > top && y < bottom) {
+    const r = getFurnitureRect(f);
+    if (x > r.left - 8 && x < r.right + 8 && y > r.top + 4 && y < r.bottom + 6) {
       return true;
     }
   }
 
   return false;
 }
-
