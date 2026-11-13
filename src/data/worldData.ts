@@ -566,7 +566,7 @@ export const buildings: BuildingData[] = [
       title: "Pengalaman Kerja — Fulltime",
       subtitle: "IT Developer — Mei 2023 s.d Sept. 2025",
       paragraphs: [
-        "Awal masuk karena diajak senior saat di SMK dulu untuk bantu dia di perusahaan ini, saat beliau resign ku menggantikan posisi beliau dan menjadi kartap di tahun 2024 bulan Februari.",
+        "Kantor pertama yang nerima saat ku baru lulus SMK, ketemu rekan kerja, sahabat, crush, atasan yang seru pol dan baik.",
       ],
       bullets: [
         "Full-Stack Web & GIS Development: Engineered and maintained high-performance web applications, including WebGIS and Custom CMS, using Python, Golang, and Laravel",
@@ -842,72 +842,72 @@ export function getBuildingBounds(b: BuildingData) {
   };
 }
 
-  function insideBuildingFootprint(zone: TownZone, x: number, y: number): boolean {
-    for (const b of buildings) {
-      if (b.zone !== zone) continue;
-      const v = b.visual;
-      const dx = v.depth * OBLIQUE.x;
-      const dy = v.depth * OBLIQUE.y;
-      const left = b.x - v.width / 2 - 6;
-      const right = b.x + v.width / 2 + dx * 0.7;
-      const top = b.y - dy;
-      const bottom = b.y + 4;
-      if (x > left && x < right && y > top && y < bottom) return true;
-    }
-    return false;
+function insideBuildingFootprint(zone: TownZone, x: number, y: number): boolean {
+  for (const b of buildings) {
+    if (b.zone !== zone) continue;
+    const v = b.visual;
+    const dx = v.depth * OBLIQUE.x;
+    const dy = v.depth * OBLIQUE.y;
+    const left = b.x - v.width / 2 - 6;
+    const right = b.x + v.width / 2 + dx * 0.7;
+    const top = b.y - dy;
+    const bottom = b.y + 4;
+    if (x > left && x < right && y > top && y < bottom) return true;
   }
+  return false;
+}
 
-    function inWater(zone: TownZone, x: number, y: number): boolean {
-      const pond = TOWN_ZONES[zone].pond;
-      if (!pond) return false;
-      const nx = (x - pond.x) / (pond.rx + 4);
-      const ny = (y - pond.y) / (pond.ry + 4);
-      return nx * nx + ny * ny < 1;
+function inWater(zone: TownZone, x: number, y: number): boolean {
+  const pond = TOWN_ZONES[zone].pond;
+  if (!pond) return false;
+  const nx = (x - pond.x) / (pond.rx + 4);
+  const ny = (y - pond.y) / (pond.ry + 4);
+  return nx * nx + ny * ny < 1;
+}
+
+export function isBlockedInZone(zone: TownZone, x: number, y: number): boolean {
+  const cfg = TOWN_ZONES[zone];
+  if (x < 22 || y < 32 || x > cfg.width - 22 || y > cfg.height - 14) return true;
+  return insideBuildingFootprint(zone, x, y) || inWater(zone, x, y);
+}
+
+export function findNearestBuildingInZone(
+  zone: TownZone,
+  playerX: number,
+  playerY: number,
+  maxDistance = INTERACT_DISTANCE,
+): BuildingData | null {
+  let best: BuildingData | null = null;
+  let bestDist = maxDistance;
+  for (const b of buildings) {
+    if (b.zone !== zone) continue;
+    const dist = Math.hypot(playerX - b.x, playerY - (b.y + 14));
+    const limit = Math.max(maxDistance, b.visual.width * 0.75);
+    if (dist < limit && dist < bestDist) {
+      best = b;
+      bestDist = dist;
     }
+  }
+  return best;
+}
 
-      export function isBlockedInZone(zone: TownZone, x: number, y: number): boolean {
-        const cfg = TOWN_ZONES[zone];
-        if (x < 22 || y < 32 || x > cfg.width - 22 || y > cfg.height - 14) return true;
-        return insideBuildingFootprint(zone, x, y) || inWater(zone, x, y);
-      }
+export function findNearestGate(
+  zone: TownZone,
+  playerX: number,
+  playerY: number,
+  maxDist = 68,
+): GateConfig | null {
+  const cfg = TOWN_ZONES[zone];
+  const gates = [cfg.leftGate, cfg.rightGate].filter((g): g is GateConfig => !!g);
+  for (const g of gates) {
+    if (Math.hypot(playerX - g.x, playerY - g.y) <= maxDist) {
+      return g;
+    }
+  }
+  return null;
+}
 
-        export function findNearestBuildingInZone(
-          zone: TownZone,
-          playerX: number,
-          playerY: number,
-          maxDistance = INTERACT_DISTANCE,
-        ): BuildingData | null {
-        let best: BuildingData | null = null;
-        let bestDist = maxDistance;
-        for (const b of buildings) {
-          if (b.zone !== zone) continue;
-          const dist = Math.hypot(playerX - b.x, playerY - (b.y + 14));
-          const limit = Math.max(maxDistance, b.visual.width * 0.75);
-          if (dist < limit && dist < bestDist) {
-            best = b;
-            bestDist = dist;
-          }
-        }
-        return best;
-      }
-
-      export function findNearestGate(
-        zone: TownZone,
-        playerX: number,
-        playerY: number,
-        maxDist = 68,
-      ): GateConfig | null {
-        const cfg = TOWN_ZONES[zone];
-        const gates = [cfg.leftGate, cfg.rightGate].filter((g): g is GateConfig => !!g);
-        for (const g of gates) {
-          if (Math.hypot(playerX - g.x, playerY - g.y) <= maxDist) {
-            return g;
-          }
-        }
-        return null;
-      }
-
-      export function isNearParking(zone: TownZone, playerX: number, playerY: number): boolean {
-        const p = TOWN_ZONES[zone].parkingSpot;
-        return Math.hypot(playerX - p.x, playerY - p.y) <= 64;
-      }
+export function isNearParking(zone: TownZone, playerX: number, playerY: number): boolean {
+  const p = TOWN_ZONES[zone].parkingSpot;
+  return Math.hypot(playerX - p.x, playerY - p.y) <= 64;
+}
