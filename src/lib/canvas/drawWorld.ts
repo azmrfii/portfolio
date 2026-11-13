@@ -107,6 +107,9 @@ export function drawWorldGround(
   ctx.fillRect(-cameraX, -cameraY, cfg.width, cfg.height);
 
   drawHedgeBorder(w, cfg.width, cfg.height, !!cfg.leftGate, !!cfg.rightGate);
+  if (cfg.garden) {
+    drawFlowerGarden(w, cfg.garden, time);
+  }
   if (cfg.pond) {
     drawPond(w, cfg.pond, time);
   }
@@ -429,6 +432,118 @@ function drawPond(
   ctx.arc(cx + 58, cy - 26, 3, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+
+  // Signboard under pond
+  roundRectPath(ctx, cx - 50, cy + pond.ry + 13, 100, 16, 5);
+  fillStroke(ctx, "#0e5c8c", 1.4, "#bae6fd");
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "800 8.5px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("🐟 KOLAM IKAN KOI", cx, cy + pond.ry + 21);
+}
+
+function drawFlowerGarden(
+  w: WorldRenderContext,
+  garden: { x: number; y: number; width: number; height: number },
+  time: number,
+): void {
+  const { ctx, cameraX, cameraY } = w;
+  const pat = getPatterns(ctx);
+  const gx = garden.x - cameraX;
+  const gy = garden.y - cameraY;
+  const gw = garden.width;
+  const gh = garden.height;
+  const left = gx - gw / 2;
+  const top = gy - gh / 2;
+
+  // Stone path border & base
+  roundRectPath(ctx, left - 4, top - 4, gw + 8, gh + 8, 12);
+  fillStroke(ctx, anchor(pat.curb, cameraX, cameraY), 2, "#5c554a");
+
+  // Inner garden grass
+  roundRectPath(ctx, left + 2, top + 2, gw - 4, gh - 4, 9);
+  fillStroke(ctx, "#68b849", 1.2, "#4a8c32");
+
+  // Stone cross-path in the center
+  ctx.fillStyle = "#d6cfc2";
+  ctx.fillRect(gx - 9, top + 2, 18, gh - 4);
+  ctx.fillRect(left + 2, gy - 7, gw - 4, 14);
+
+  // 4 rich soil flowerbeds in the quadrants
+  const bedW = (gw - 32) / 2;
+  const bedH = (gh - 28) / 2;
+  const beds: [number, number, string[]][] = [
+    [left + 6, top + 6, ["#f43f5e", "#fb7185", "#fda4af"]], // Red/pink roses
+    [gx + 10, top + 6, ["#facc15", "#fde047", "#fb923c"]], // Sunflowers/marigolds
+    [left + 6, gy + 8, ["#a855f7", "#c084fc", "#f472b6"]], // Lavender/tulips
+    [gx + 10, gy + 8, ["#38bdf8", "#60a5fa", "#ffffff"]], // Bluebells/daisies
+  ];
+
+  for (const [bx, by, palette] of beds) {
+    roundRectPath(ctx, bx, by, bedW, bedH, 5);
+    fillStroke(ctx, "#6b4423", 1.4, "#432812");
+
+    // Rows of blooming flowers inside each bed
+    const cols = 5;
+    const rows = 2;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const fx = bx + 8 + (c * (bedW - 16)) / (cols - 1);
+        const fy = by + 7 + r * (bedH - 13);
+        const sway = Math.sin(time * 0.003 + c * 0.8 + r) * 0.8;
+
+        // Leaves
+        ctx.fillStyle = "#22c55e";
+        ctx.beginPath();
+        ctx.arc(fx - 2, fy + 1, 2.2, 0, Math.PI * 2);
+        ctx.arc(fx + 2, fy + 1, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Petals
+        ctx.fillStyle = palette[(c + r) % palette.length];
+        for (let p = 0; p < 5; p++) {
+          const a = (p / 5) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(fx + sway + Math.cos(a) * 2.4, fy - 1 + Math.sin(a) * 2.4, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Flower center
+        ctx.fillStyle = "#fef08a";
+        ctx.beginPath();
+        ctx.arc(fx + sway, fy - 1, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // Cozy wooden garden bench at the top center of the garden
+  roundRectPath(ctx, gx - 20, top - 9, 40, 10, 2);
+  fillStroke(ctx, "#b45309", 1.4, "#451a03");
+  ctx.fillStyle = "#d97706";
+  ctx.fillRect(gx - 18, top - 6, 36, 3);
+
+  // Fluttering butterflies
+  for (let i = 0; i < 2; i++) {
+    const t = time * 0.0018 + i * 3.1;
+    const bx = gx + Math.cos(t) * (gw * 0.32);
+    const by = gy + Math.sin(t * 1.5) * (gh * 0.28) - 6;
+    const wing = Math.abs(Math.sin(time * 0.015 + i)) * 3.5 + 1;
+    ctx.fillStyle = i === 0 ? "#f472b6" : "#facc15";
+    ctx.beginPath();
+    ctx.ellipse(bx - 2, by, wing, 2.2, -0.3, 0, Math.PI * 2);
+    ctx.ellipse(bx + 2, by, wing, 2.2, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Signboard under garden
+  roundRectPath(ctx, gx - 48, top + gh + 7, 96, 16, 5);
+  fillStroke(ctx, "#15803d", 1.4, "#bbf7d0");
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "800 8.5px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("🌸 TAMAN BUNGA", gx, top + gh + 15);
 }
 
 function drawKoi(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, color: string): void {

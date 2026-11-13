@@ -117,6 +117,7 @@ export interface ZoneConfig {
   rightGate?: GateConfig;
   parkingSpot: { x: number; y: number };
   pond?: { x: number; y: number; rx: number; ry: number };
+  garden?: { x: number; y: number; width: number; height: number };
 }
 
 export const ROAD_Y = 350;
@@ -155,7 +156,9 @@ export const TOWN_ZONES: Record<TownZone, ZoneConfig> = {
     ],
     defaultSpawn: { x: 180, y: ROAD_Y },
     spawnFromRight: { x: 820, y: ROAD_Y },
-    parkingSpot: { x: 245, y: 445 },
+    parkingSpot: { x: 225, y: 445 },
+    garden: { x: 470, y: 450, width: 168, height: 76 },
+    pond: { x: 705, y: 450, rx: 64, ry: 40 },
     rightGate: {
       x: 900,
       y: ROAD_Y,
@@ -760,18 +763,15 @@ export const decor: DecorItem[] = [
   { id: "h_t3", zone: "home_zone", kind: "pine", x: 460, y: 110 },
   { id: "h_t4", zone: "home_zone", kind: "tree", x: 640, y: 115 },
   { id: "h_t5", zone: "home_zone", kind: "pine", x: 885, y: 120 },
-  { id: "h_t6", zone: "home_zone", kind: "tree", x: 95, y: 485 },
-  { id: "h_t7", zone: "home_zone", kind: "pine", x: 430, y: 490 },
-  { id: "h_t8", zone: "home_zone", kind: "tree", x: 650, y: 485 },
-  { id: "h_t9", zone: "home_zone", kind: "pine", x: 860, y: 490 },
-  { id: "h_b1", zone: "home_zone", kind: "bush", x: 85, y: 290 },
-  { id: "h_b2", zone: "home_zone", kind: "bush", x: 355, y: 280 },
-  { id: "h_b3", zone: "home_zone", kind: "bush", x: 520, y: 445 },
-  { id: "h_f1", zone: "home_zone", kind: "flowers", x: 270, y: 295 },
-  { id: "h_f2", zone: "home_zone", kind: "flowers", x: 625, y: 295 },
-  { id: "h_f3", zone: "home_zone", kind: "flowers", x: 460, y: 435 },
+  { id: "h_t6", zone: "home_zone", kind: "tree", x: 80, y: 485 },
+  { id: "h_t7", zone: "home_zone", kind: "pine", x: 342, y: 495 },
+  { id: "h_t9", zone: "home_zone", kind: "pine", x: 850, y: 495 },
+  { id: "h_b2", zone: "home_zone", kind: "bush", x: 375, y: 275 },
+  { id: "h_f1", zone: "home_zone", kind: "flowers", x: 330, y: 295 },
+  { id: "h_f2", zone: "home_zone", kind: "flowers", x: 420, y: 295 },
+  { id: "h_f3", zone: "home_zone", kind: "flowers", x: 625, y: 295 },
   { id: "h_l1", zone: "home_zone", kind: "lamp", x: 280, y: 315 },
-  { id: "h_l2", zone: "home_zone", kind: "lamp", x: 445, y: 315 },
+  { id: "h_l2", zone: "home_zone", kind: "lamp", x: 455, y: 315 },
   { id: "h_l3", zone: "home_zone", kind: "lamp", x: 635, y: 315 },
 
   // ==================== EDU ZONE DECOR ====================

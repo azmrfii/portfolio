@@ -171,6 +171,18 @@ export default function Hud({
                     strokeWidth={36}
                     strokeLinejoin="miter"
                   />
+                  {currentZone.garden && (
+                    <rect
+                      x={currentZone.garden.x - currentZone.garden.width / 2}
+                      y={currentZone.garden.y - currentZone.garden.height / 2}
+                      width={currentZone.garden.width}
+                      height={currentZone.garden.height}
+                      rx={8}
+                      fill="#ec4899"
+                      stroke="#bbf7d0"
+                      strokeWidth={4}
+                    />
+                  )}
                   {currentZone.pond && (
                     <ellipse
                       cx={currentZone.pond.x}
