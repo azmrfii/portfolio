@@ -1,6 +1,6 @@
 "use client";
 
-export type BgmTheme = "town" | "house" | "agl";
+export type BgmTheme = "town" | "house" | "agl" | "driving";
 
 // Note frequencies (Hz)
 const N: Record<string, number> = {
@@ -14,13 +14,13 @@ const N: Record<string, number> = {
 // Cheerful 16-bar town theme (eighth-note steps at ~136 BPM)
 const TOWN_MELODY: string[] = [
   "E5", "G5", "A5", "G5", "E5", "D5", "C5", "D5",
-  "E5", "G5", "A5", "E5", "D5", "_",  "G4", "_",
+  "E5", "G5", "A5", "E5", "D5", "_", "G4", "_",
   "C5", "D5", "E5", "G5", "A5", "G5", "E5", "C5",
-  "D5", "E5", "D5", "B4", "C5", "_",  "_",  "_",
+  "D5", "E5", "D5", "B4", "C5", "_", "_", "_",
   "A4", "C5", "E5", "A5", "G5", "E5", "C5", "D5",
   "E5", "F5", "E5", "D5", "C5", "A4", "G4", "_",
   "F4", "A4", "C5", "F5", "E5", "D5", "C5", "E5",
-  "D5", "C5", "B4", "D5", "C5", "_",  "_",  "_",
+  "D5", "C5", "B4", "D5", "C5", "_", "_", "_",
 ];
 
 const TOWN_BASS: string[] = [
@@ -37,13 +37,13 @@ const TOWN_BASS: string[] = [
 // Warm, relaxed cozy house theme (slower, softer triangle/sine tones)
 const HOUSE_MELODY: string[] = [
   "E4", "_", "G4", "A4", "B4", "_", "A4", "G4",
-  "E4", "_", "D4", "E4", "C4", "_", "_",  "_",
+  "E4", "_", "D4", "E4", "C4", "_", "_", "_",
   "F4", "_", "A4", "C5", "B4", "_", "G4", "E4",
-  "D4", "_", "E4", "F4", "G4", "_", "_",  "_",
+  "D4", "_", "E4", "F4", "G4", "_", "_", "_",
   "A4", "_", "C5", "B4", "G4", "_", "E4", "G4",
   "F4", "_", "E4", "D4", "E4", "_", "C4", "_",
   "D4", "_", "F4", "A4", "G4", "_", "E4", "D4",
-  "C4", "_", "E4", "D4", "C4", "_", "_",  "_",
+  "C4", "_", "E4", "D4", "C4", "_", "_", "_",
 ];
 
 const HOUSE_BASS: string[] = [
@@ -66,7 +66,7 @@ const AGL_MELODY: string[] = [
   "A5", "A5", "G5", "E5", "G5", "G5", "E5", "D5",
   "F5", "F5", "E5", "D5", "E5", "D5", "C5", "B4",
   "A4", "E5", "A5", "G5", "E5", "D5", "C5", "D5",
-  "E5", "D5", "C5", "B4", "A4", "_",  "E5", "_",
+  "E5", "D5", "C5", "B4", "A4", "_", "E5", "_",
 ];
 
 const AGL_BASS: string[] = [
@@ -78,6 +78,21 @@ const AGL_BASS: string[] = [
   "D3", "D4", "D3", "D4", "E3", "E4", "E3", "E4",
   "F3", "F3", "G3", "G3", "A3", "A3", "G3", "E3",
   "E3", "E3", "E3", "E3", "A2", "A3", "A2", "_",
+];
+
+// Fast arcade driving theme (OutRun / Mario Kart style)
+const DRIVING_MELODY: string[] = [
+  "C5", "E5", "G5", "A5", "G5", "E5", "C5", "D5",
+  "E5", "G5", "A5", "G5", "F5", "E5", "D5", "_",
+  "D5", "F5", "A5", "G5", "F5", "D5", "B4", "D5",
+  "G5", "F5", "E5", "D5", "C5", "_", "G4", "_",
+];
+
+const DRIVING_BASS: string[] = [
+  "C3", "G3", "C3", "G3", "A2", "E3", "A2", "E3",
+  "F3", "C4", "F3", "C4", "G3", "D4", "G3", "D4",
+  "D3", "A3", "D3", "A3", "G3", "D4", "G3", "D4",
+  "C3", "G3", "A2", "E3", "C3", "G3", "C3", "_",
 ];
 
 class ChiptuneManager {
@@ -163,35 +178,71 @@ class ChiptuneManager {
       window.clearInterval(this.timer);
       this.timer = null;
     }
-    const stepMs = this.theme === "agl" ? 145 : this.theme === "town" ? 195 : 240;
+    const stepMs =
+      this.theme === "driving"
+        ? 135
+        : this.theme === "agl"
+          ? 145
+          : this.theme === "town"
+            ? 195
+            : 240;
     this.timer = window.setInterval(() => this.tick(), stepMs);
   }
 
   private tick(): void {
     if (this.muted || !this.ctx || !this.masterGain || this.ctx.state !== "running") return;
-    const mel = this.theme === "agl" ? AGL_MELODY : this.theme === "town" ? TOWN_MELODY : HOUSE_MELODY;
-    const bas = this.theme === "agl" ? AGL_BASS : this.theme === "town" ? TOWN_BASS : HOUSE_BASS;
+    const mel =
+      this.theme === "driving"
+        ? DRIVING_MELODY
+        : this.theme === "agl"
+          ? AGL_MELODY
+          : this.theme === "town"
+            ? TOWN_MELODY
+            : HOUSE_MELODY;
+    const bas =
+      this.theme === "driving"
+        ? DRIVING_BASS
+        : this.theme === "agl"
+          ? AGL_BASS
+          : this.theme === "town"
+            ? TOWN_BASS
+            : HOUSE_BASS;
     const idx = this.step % mel.length;
     this.step++;
 
     const mNote = mel[idx];
     const bNote = bas[idx];
-    const stepSec = this.theme === "agl" ? 0.13 : this.theme === "town" ? 0.18 : 0.22;
+    const stepSec =
+      this.theme === "driving"
+        ? 0.12
+        : this.theme === "agl"
+          ? 0.13
+          : this.theme === "town"
+            ? 0.18
+            : 0.22;
 
     if (mNote && N[mNote]) {
       this.playTone(
         N[mNote],
         stepSec * 0.9,
-        this.theme === "agl" ? "sawtooth" : this.theme === "town" ? "square" : "triangle",
-        this.theme === "agl" ? 0.16 : this.theme === "town" ? 0.14 : 0.22,
+        this.theme === "agl" || this.theme === "driving"
+          ? "sawtooth"
+          : this.theme === "town"
+            ? "square"
+            : "triangle",
+        this.theme === "agl" || this.theme === "driving"
+          ? 0.16
+          : this.theme === "town"
+            ? 0.14
+            : 0.22,
       );
     }
     if (bNote && N[bNote]) {
       this.playTone(
         N[bNote],
         stepSec * 1.3,
-        this.theme === "agl" ? "triangle" : "triangle",
-        this.theme === "agl" ? 0.24 : 0.18,
+        "triangle",
+        this.theme === "agl" || this.theme === "driving" ? 0.24 : 0.18,
       );
     }
   }
@@ -269,6 +320,19 @@ class ChiptuneManager {
         this.playTone(freq, 0.12, "sine", 0.18);
       }, idx * 60);
     });
+  }
+
+  playHorn(isMoto = false): void {
+    const f1 = isMoto ? 580 : 392;
+    const f2 = isMoto ? 660 : 493.88;
+    this.playTone(f1, 0.1, "sawtooth", 0.2);
+    window.setTimeout(() => {
+      this.playTone(f2, 0.14, "sawtooth", 0.22);
+    }, 105);
+  }
+
+  playBoost(): void {
+    this.playTone(280, 0.22, "sawtooth", 0.2, 880);
   }
 }
 

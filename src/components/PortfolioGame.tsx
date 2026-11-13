@@ -1,6 +1,11 @@
 "use client";
 
-import { PLAYER_START, type BuildingData } from "@/data/worldData";
+import {
+  PLAYER_START,
+  type BuildingData,
+  type TownZone,
+  type VehicleType,
+} from "@/data/worldData";
 import { sound } from "@/lib/audio/chiptune";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BuildingModal from "./BuildingModal";
@@ -11,7 +16,9 @@ import VirtualControls from "./VirtualControls";
 
 export default function PortfolioGame() {
   const apiRef = useRef<GameCanvasHandle | null>(null);
-  const [scene, setScene] = useState<"town" | "house" | "agl">("town");
+  const [scene, setScene] = useState<"town" | "house" | "agl" | "driving">("town");
+  const [zone, setZone] = useState<TownZone>("home_zone");
+  const [vehicle, setVehicle] = useState<VehicleType>("car");
   const [playerPos, setPlayerPos] = useState(PLAYER_START);
   const [nearestLabel, setNearestLabel] = useState<string | null>(null);
   const [activeBuilding, setActiveBuilding] = useState<BuildingData | null>(null);
@@ -58,12 +65,22 @@ export default function PortfolioGame() {
     setMuted(next);
   }, []);
 
+  const handleSelectVehicle = useCallback((v: VehicleType) => {
+    sound.unlockAndStart();
+    sound.playBlip();
+    setVehicle(v);
+  }, []);
+
   return (
     <div className="relative h-[100dvh] w-full overflow-hidden bg-[#6fbf5a]">
       <GameCanvas
         apiRef={apiRef}
         scene={scene}
         onSceneChange={setScene}
+        zone={zone}
+        onZoneChange={setZone}
+        vehicle={vehicle}
+        onVehicleChange={setVehicle}
         overlayOpen={!!activeBuilding || !!activeDialog}
         onNearestLabelChange={setNearestLabel}
         onOpenBuilding={setActiveBuilding}
@@ -73,11 +90,15 @@ export default function PortfolioGame() {
 
       <Hud
         scene={scene}
+        zone={zone}
+        vehicle={vehicle}
         playerPos={playerPos}
         nearestLabel={nearestLabel}
         muted={muted}
         onToggleMute={handleToggleMute}
-        onJump={(x, y) => apiRef.current?.jumpTo(x, y)}
+        onSelectVehicle={handleSelectVehicle}
+        onTravelToZone={(targetZone) => apiRef.current?.travelToZone(targetZone, "auto")}
+        onSkipDriving={() => apiRef.current?.skipDriving()}
         onExitHouse={() => apiRef.current?.exitHouse()}
       />
 

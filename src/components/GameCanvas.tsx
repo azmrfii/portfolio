@@ -34,45 +34,53 @@ import {
   NPC_GREET_DISTANCE,
   PLAYER_SPEED,
   PLAYER_START,
-  WORLD_HEIGHT,
-  WORLD_WIDTH,
-  buildings,
-  decor,
-  findNearestBuilding,
+  TOWN_ZONES,
+  ZONE_ORDER,
+  findNearestBuildingInZone,
+  findNearestGate,
   getBuildingBounds,
-  isBlocked,
+  getZoneBuildings,
+  getZoneDecor,
+  getZoneNpcs,
+  isBlockedInZone,
+  isNearParking,
   npcs,
   type BuildingData,
+  type GateConfig,
+  type TownZone,
+  type VehicleType,
 } from "@/data/worldData";
 import { sound } from "@/lib/audio/chiptune";
 import { baristaFrame, type BaristaFrame, type BaristaOrder } from "@/lib/canvas/barista";
 import {
-  BRIDGE_RAIL_SORT_Y,
   DRINK_DURATION,
   aglFurnitureTopY,
   drawAglFurnitureItem,
   drawAglGround,
   drawAglLighting,
   drawAglNpc,
-  drinkSipsDone,
-  drawBridgeFrontRail,
   drawBuilding,
   drawCat,
   drawDecor,
   drawDeskChairBack,
+  drawDrivingScene,
   drawFurnitureItem,
-  furnitureTopY,
   drawHouseGround,
   drawNpc,
   drawPlayer,
   drawWorldGround,
+  drinkSipsDone,
+  furnitureTopY,
   updatePlayerAnimation,
   type CatRuntimeState,
   type CounterDrink,
+  type DrivingRuntimeState,
   type Facing,
-  type PlayerDrinkingState,
+  type HighwayBoostPad,
+  type HighwayTrafficItem,
   type InputState,
   type NpcDrawState,
+  type PlayerDrinkingState,
   type PlayerState,
 } from "@/lib/canvas";
 import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
@@ -82,7 +90,8 @@ export interface GameCanvasHandle {
   setVirtual: (dir: keyof VirtualDirs, pressed: boolean) => void;
   triggerWave: () => void;
   triggerInteract: () => void;
-  jumpTo: (x: number, y: number) => void;
+  travelToZone: (targetZone: TownZone, mode?: "manual" | "auto") => void;
+  skipDriving: () => void;
   exitHouse: () => void;
 }
 
@@ -94,8 +103,12 @@ interface VirtualDirs {
 }
 
 interface GameCanvasProps {
-  scene: "town" | "house" | "agl";
-  onSceneChange: (scene: "town" | "house" | "agl") => void;
+  scene: "town" | "house" | "agl" | "driving";
+  onSceneChange: (scene: "town" | "house" | "agl" | "driving") => void;
+  zone: TownZone;
+  onZoneChange: (zone: TownZone) => void;
+  vehicle: VehicleType;
+  onVehicleChange: (vehicle: VehicleType) => void;
   onNearestLabelChange: (label: string | null) => void;
   onOpenBuilding: (building: BuildingData) => void;
   onOpenDialog: (dialog: RpgDialogData) => void;
@@ -106,7 +119,7 @@ interface GameCanvasProps {
 
 type TownDrawItem =
   | { kind: "decor" | "building" | "npc"; sortY: number; index: number }
-  | { kind: "player" | "bridgeRail"; sortY: number };
+  | { kind: "player"; sortY: number };
 
 type HouseDrawItem =
   | { kind: "furniture" | "cat"; sortY: number; index: number }
@@ -144,9 +157,41 @@ const GAME_KEYS = new Set([
   "Enter",
 ]);
 
+function createHighwayTraffic(totalDistance: number): HighwayTrafficItem[] {
+  const colors = ["#3b82f6", "#10b981", "#f59e0b", "#a855f7", "#ec4899"];
+  const items: HighwayTrafficItem[] = [];
+  for (let i = 0; i < 4; i++) {
+    items.push({
+      id: i,
+      x: 340 + i * ((totalDistance - 450) / 4),
+      lane: ((i * 2 + 1) % 3) as 0 | 1 | 2,
+      color: colors[i % colors.length],
+      speed: 145 + (i % 2) * 30,
+    });
+  }
+  return items;
+}
+
+function createBoostPads(totalDistance: number): HighwayBoostPad[] {
+  const pads: HighwayBoostPad[] = [];
+  for (let i = 0; i < 4; i++) {
+    pads.push({
+      id: i,
+      x: 240 + i * ((totalDistance - 360) / 4),
+      lane: (i % 3) as 0 | 1 | 2,
+      collected: false,
+    });
+  }
+  return pads;
+}
+
 export default function GameCanvas({
   scene,
   onSceneChange,
+  zone,
+  onZoneChange,
+  vehicle,
+  onVehicleChange,
   onNearestLabelChange,
   onOpenBuilding,
   onOpenDialog,
@@ -179,19 +224,27 @@ export default function GameCanvas({
   /** Furniture the player is currently sitting or sleeping on */
   const seatRef = useRef<HouseDialogueItem | AglFurnitureItem | null>(null);
   const cameraRef = useRef({ x: 0, y: 0 });
-  const sceneRef = useRef<"town" | "house" | "agl">(scene);
+  const sceneRef = useRef<"town" | "house" | "agl" | "driving">(scene);
+  const zoneRef = useRef<TownZone>(zone);
+  const vehicleRef = useRef<VehicleType>(vehicle);
+  const drivingRef = useRef<DrivingRuntimeState | null>(null);
   const lastInteriorRef = useRef<"house" | "agl">("house");
   const fadeRef = useRef<{ alpha: number; dir: -1 | 0 | 1; onMid?: () => void }>({
     alpha: 0,
     dir: 0,
   });
   const exitCooldownRef = useRef(0);
+  const gateCooldownRef = useRef(0);
 
   const nearestBuildingRef = useRef<BuildingData | null>(null);
+  const nearestGateRef = useRef<GateConfig | null>(null);
+  const nearParkingRef = useRef<boolean>(false);
   const nearestHouseRef = useRef<HouseTarget | null>(null);
   const nearestAglRef = useRef<AglTarget | null>(null);
 
-  const dymasCraftingRef = useRef<(BaristaOrder & { lastSfx: number; lastStep: number }) | null>(null);
+  const dymasCraftingRef = useRef<(BaristaOrder & { lastSfx: number; lastStep: number }) | null>(
+    null,
+  );
   const playerDrinkingRef = useRef<PlayerDrinkingState | null>(null);
   /** Glass sitting on the bar counter (served, or empty after drinking) */
   const counterDrinkRef = useRef<CounterDrink | null>(null);
@@ -221,6 +274,12 @@ export default function GameCanvas({
   const waveLatch = useRef(false);
   const overlayOpenRef = useRef(overlayOpen);
   const onOpenDialogRef = useRef(onOpenDialog);
+  const onSceneChangeRef = useRef(onSceneChange);
+  const onZoneChangeRef = useRef(onZoneChange);
+  const onVehicleChangeRef = useRef(onVehicleChange);
+  const onPlayerPosRef = useRef(onPlayerPos);
+  const onNearestLabelChangeRef = useRef(onNearestLabelChange);
+  const onOpenBuildingRef = useRef(onOpenBuilding);
 
   useEffect(() => {
     overlayOpenRef.current = overlayOpen;
@@ -231,59 +290,244 @@ export default function GameCanvas({
   }, [onOpenDialog]);
 
   useEffect(() => {
+    onSceneChangeRef.current = onSceneChange;
+  }, [onSceneChange]);
+
+  useEffect(() => {
+    onZoneChangeRef.current = onZoneChange;
+  }, [onZoneChange]);
+
+  useEffect(() => {
+    onVehicleChangeRef.current = onVehicleChange;
+  }, [onVehicleChange]);
+
+  useEffect(() => {
+    onPlayerPosRef.current = onPlayerPos;
+  }, [onPlayerPos]);
+
+  useEffect(() => {
+    onNearestLabelChangeRef.current = onNearestLabelChange;
+  }, [onNearestLabelChange]);
+
+  useEffect(() => {
+    onOpenBuildingRef.current = onOpenBuilding;
+  }, [onOpenBuilding]);
+
+  useEffect(() => {
     sceneRef.current = scene;
   }, [scene]);
 
-  const transitionToScene = useCallback(
-    (target: "town" | "house" | "agl") => {
+  useEffect(() => {
+    zoneRef.current = zone;
+  }, [zone]);
+
+  useEffect(() => {
+    vehicleRef.current = vehicle;
+  }, [vehicle]);
+
+  const startDriving = useCallback(
+    (targetZone: TownZone, mode: "manual" | "auto" = "manual", chosenVehicle?: VehicleType) => {
       if (fadeRef.current.dir !== 0) return;
-      sound.playDoor(target !== "town");
+      if (sceneRef.current === "town" && targetZone === zoneRef.current) return;
+
+      const v = chosenVehicle ?? vehicleRef.current;
+      if (chosenVehicle && chosenVehicle !== vehicleRef.current) {
+        vehicleRef.current = chosenVehicle;
+        onVehicleChangeRef.current(chosenVehicle);
+      }
+
+      const fromZone = zoneRef.current;
+      const fromIdx = ZONE_ORDER.indexOf(fromZone);
+      const toIdx = ZONE_ORDER.indexOf(targetZone);
+      const direction: 1 | -1 = toIdx >= fromIdx ? 1 : -1;
+      const totalDistance = mode === "auto" ? 1250 : 2100;
+
+      sound.unlockAndStart();
+      sound.playHorn(v === "moto");
+
       fadeRef.current = {
         alpha: 0,
         dir: 1,
         onMid: () => {
-          sceneRef.current = target;
-          onSceneChange(target);
-          sound.setTheme(target);
-          const p = playerRef.current;
-          p.pose = "stand";
-          seatRef.current = null;
-          dymasCraftingRef.current = null;
-          playerDrinkingRef.current = null;
-          counterDrinkRef.current = null;
-          const canvas = canvasRef.current;
-          const vw = canvas?.clientWidth ?? 800;
-          const vh = canvas?.clientHeight ?? 600;
-          if (target === "house") {
-            lastInteriorRef.current = "house";
-            p.x = HOUSE_SPAWN.x;
-            p.y = HOUSE_SPAWN.y;
-            p.facing = "up";
-            exitCooldownRef.current = 700;
-            cameraRef.current.x = cameraTarget(p.x, vw, HOUSE_WIDTH);
-            cameraRef.current.y = cameraTarget(p.y, vh, HOUSE_HEIGHT);
-          } else if (target === "agl") {
-            lastInteriorRef.current = "agl";
-            p.x = AGL_SPAWN.x;
-            p.y = AGL_SPAWN.y;
-            p.facing = "up";
-            exitCooldownRef.current = 700;
-            cameraRef.current.x = cameraTarget(p.x, vw, AGL_WIDTH);
-            cameraRef.current.y = cameraTarget(p.y, vh, AGL_HEIGHT);
-          } else {
-            const door = lastInteriorRef.current === "agl" ? TOWN_AGL_DOOR : TOWN_HOUSE_DOOR;
-            p.x = door.x;
-            p.y = door.y;
-            p.facing = "down";
-            cameraRef.current.x = cameraTarget(p.x, vw, WORLD_WIDTH);
-            cameraRef.current.y = cameraTarget(p.y, vh, WORLD_HEIGHT);
-          }
-          onPlayerPos({ x: p.x, y: p.y });
+          drivingRef.current = {
+            fromZone,
+            toZone: targetZone,
+            vehicle: v,
+            mode,
+            direction,
+            distance: 0,
+            totalDistance,
+            laneY: 0,
+            speed: mode === "auto" ? 430 : 290,
+            boosting: 0,
+            honkTimer: 450,
+            scrollX: 0,
+            traffic: createHighwayTraffic(totalDistance),
+            boostPads: createBoostPads(totalDistance),
+          };
+          sceneRef.current = "driving";
+          onSceneChangeRef.current("driving");
+          sound.setTheme("driving");
+          onNearestLabelChangeRef.current(null);
         },
       };
     },
-    [onPlayerPos, onSceneChange],
+    [],
   );
+
+  const finishDriving = useCallback(() => {
+    const d = drivingRef.current;
+    if (!d || fadeRef.current.dir !== 0) return;
+    const destZone = d.toZone;
+    const dir = d.direction;
+
+    fadeRef.current = {
+      alpha: 0,
+      dir: 1,
+      onMid: () => {
+        drivingRef.current = null;
+        zoneRef.current = destZone;
+        onZoneChangeRef.current(destZone);
+        sceneRef.current = "town";
+        onSceneChangeRef.current("town");
+        sound.setTheme("town");
+
+        const cfg = TOWN_ZONES[destZone];
+        const spawn =
+          dir === 1
+            ? (cfg.spawnFromLeft ?? cfg.defaultSpawn)
+            : (cfg.spawnFromRight ?? cfg.defaultSpawn);
+
+        const p = playerRef.current;
+        p.pose = "stand";
+        p.x = spawn.x;
+        p.y = spawn.y;
+        p.facing = dir === 1 ? "right" : "left";
+        gateCooldownRef.current = 1200;
+
+        const canvas = canvasRef.current;
+        const vw = canvas?.clientWidth ?? 800;
+        const vh = canvas?.clientHeight ?? 600;
+        cameraRef.current.x = cameraTarget(p.x, vw, cfg.width);
+        cameraRef.current.y = cameraTarget(p.y, vh, cfg.height);
+        onPlayerPosRef.current({ x: p.x, y: p.y });
+      },
+    };
+  }, []);
+
+  const transitionToScene = useCallback((target: "town" | "house" | "agl") => {
+    if (fadeRef.current.dir !== 0) return;
+    sound.playDoor(target !== "town");
+    fadeRef.current = {
+      alpha: 0,
+      dir: 1,
+      onMid: () => {
+        sceneRef.current = target;
+        onSceneChangeRef.current(target);
+        sound.setTheme(target);
+        const p = playerRef.current;
+        p.pose = "stand";
+        seatRef.current = null;
+        dymasCraftingRef.current = null;
+        playerDrinkingRef.current = null;
+        counterDrinkRef.current = null;
+        const canvas = canvasRef.current;
+        const vw = canvas?.clientWidth ?? 800;
+        const vh = canvas?.clientHeight ?? 600;
+        if (target === "house") {
+          lastInteriorRef.current = "house";
+          p.x = HOUSE_SPAWN.x;
+          p.y = HOUSE_SPAWN.y;
+          p.facing = "up";
+          exitCooldownRef.current = 700;
+          cameraRef.current.x = cameraTarget(p.x, vw, HOUSE_WIDTH);
+          cameraRef.current.y = cameraTarget(p.y, vh, HOUSE_HEIGHT);
+        } else if (target === "agl") {
+          lastInteriorRef.current = "agl";
+          p.x = AGL_SPAWN.x;
+          p.y = AGL_SPAWN.y;
+          p.facing = "up";
+          exitCooldownRef.current = 700;
+          cameraRef.current.x = cameraTarget(p.x, vw, AGL_WIDTH);
+          cameraRef.current.y = cameraTarget(p.y, vh, AGL_HEIGHT);
+        } else {
+          zoneRef.current = "home_zone";
+          onZoneChangeRef.current("home_zone");
+          const cfg = TOWN_ZONES.home_zone;
+          const door = lastInteriorRef.current === "agl" ? TOWN_AGL_DOOR : TOWN_HOUSE_DOOR;
+          p.x = door.x;
+          p.y = door.y;
+          p.facing = "down";
+          cameraRef.current.x = cameraTarget(p.x, vw, cfg.width);
+          cameraRef.current.y = cameraTarget(p.y, vh, cfg.height);
+        }
+        onPlayerPosRef.current({ x: p.x, y: p.y });
+      },
+    };
+  }, []);
+
+  const openParkingDialog = useCallback(() => {
+    sound.playBlip();
+    const curV = vehicleRef.current;
+    const curZ = zoneRef.current;
+    const otherZones = ZONE_ORDER.filter((z) => z !== curZ);
+
+    onOpenDialogRef.current({
+      speaker: "🅿️ Garasi & Parkiran Kendaraan",
+      subtitle: `Kendaraan aktif: ${curV === "car" ? "🚗 Mobil Sedan Merah" : "🏍️ Motor Sport Cyan"}`,
+      pages: [
+        "Pilih kendaraan favoritmu (Mobil atau Motor), lalu langsung tancap gas menuju Map Pendidikan atau Map Pekerjaan!",
+      ],
+      tags: ["Garasi", "Mobil Sedan", "Motor Sport", "3 Map"],
+      choices: [
+        ...otherZones.map((z) => ({
+          id: `drive_${z}`,
+          label: `${curV === "car" ? "🚗" : "🏍️"} Setir Sendiri ke ${TOWN_ZONES[z].shortLabel}`,
+        })),
+        {
+          id: "switch_vehicle",
+          label:
+            curV === "car"
+              ? "🏍️ Ganti ke Motor Sport"
+              : "🚗 Ganti ke Mobil Sedan",
+        },
+        { id: "cancel", label: "✖ Tutup" },
+      ],
+      onChoice: (id) => {
+        if (id === "switch_vehicle") {
+          const nextV: VehicleType = curV === "car" ? "moto" : "car";
+          vehicleRef.current = nextV;
+          onVehicleChangeRef.current(nextV);
+          sound.playHorn(nextV === "moto");
+          onOpenDialogRef.current({
+            speaker: nextV === "car" ? "🚗 Mobil Sedan Siap!" : "🏍️ Motor Sport Siap!",
+            subtitle: "Garasi & Parkiran",
+            pages: [
+              nextV === "car"
+                ? "Kunci mobil sudah di tangan! Jalan ke gerbang jalan raya atau pilih map untuk menyetir mobil."
+                : "Helm full-face sudah dipakai! Jalan ke gerbang jalan raya atau pilih map untuk riding naik motor.",
+            ],
+            choices: [
+              ...otherZones.map((z) => ({
+                id: `go_${z}`,
+                label: `${nextV === "car" ? "🚗" : "🏍️"} Gas Berangkat ke ${TOWN_ZONES[z].shortLabel}`,
+              })),
+              { id: "ok", label: "👍 Siap" },
+            ],
+            onChoice: (subId) => {
+              if (subId.startsWith("go_")) {
+                const target = subId.replace("go_", "") as TownZone;
+                startDriving(target, "manual", nextV);
+              }
+            },
+          });
+        } else if (id.startsWith("drive_")) {
+          const target = id.replace("drive_", "") as TownZone;
+          startDriving(target, "manual", curV);
+        }
+      },
+    });
+  }, [startDriving]);
 
   const standUp = useCallback(() => {
     const p = playerRef.current;
@@ -323,7 +567,7 @@ export default function GameCanvas({
 
   const openLaptopMenu = useCallback(
     (item: HouseDialogueItem) => {
-      onOpenDialog({
+      onOpenDialogRef.current({
         speaker: item.speaker,
         subtitle: item.room,
         pages: item.pages,
@@ -332,13 +576,13 @@ export default function GameCanvas({
           { id: "cancel", label: "✖ Batal" },
         ],
         onChoice: (id) => {
-          if (id === "about") onOpenDialog({ ...ABOUT_DIALOG });
+          if (id === "about") onOpenDialogRef.current({ ...ABOUT_DIALOG });
           else standUp();
         },
         onClose: standUp,
       });
     },
-    [onOpenDialog, standUp],
+    [standUp],
   );
 
   const interactWithFurniture = useCallback(
@@ -357,7 +601,7 @@ export default function GameCanvas({
           openLaptopMenu(item);
           return;
         case "bed":
-          onOpenDialog({
+          onOpenDialogRef.current({
             speaker: item.speaker,
             subtitle: item.room,
             pages: item.pages,
@@ -375,7 +619,7 @@ export default function GameCanvas({
                 p.y = item.y - 40;
                 seatRef.current = item;
               } else if (id === "bucket") {
-                onOpenDialog({
+                onOpenDialogRef.current({
                   speaker: "📝 Bucket List Azzam",
                   subtitle: "Ditempel di papan kepala kasur",
                   pages: [
@@ -388,7 +632,7 @@ export default function GameCanvas({
           });
           return;
         default:
-          onOpenDialog({
+          onOpenDialogRef.current({
             speaker: item.speaker,
             subtitle: item.room,
             pages: item.pages,
@@ -398,96 +642,93 @@ export default function GameCanvas({
           });
       }
     },
-    [onOpenDialog, openLaptopMenu, sitOn, transitionToScene],
+    [openLaptopMenu, sitOn, transitionToScene],
   );
 
-  const interactWithAglNpc = useCallback(
-    (npc: AglNpcData) => {
-      sound.playBlip();
-      if (npc.id === "dymas") {
-        if (dymasCraftingRef.current || playerDrinkingRef.current) return;
-        onOpenDialog({
-          speaker: `${npc.name} (${npc.role})`,
-          subtitle: "AGL — Bar & Lounge",
-          pages: npc.pages,
-          tags: npc.tags,
-          choices: npc.choices,
-          onChoice: (id) => {
-            if (id === "drink_sprite" || id === "drink_cola" || id === "drink_popice") {
-              const drinkId: DrinkId =
-                id === "drink_sprite" ? "sprite" : id === "drink_cola" ? "cola" : "popice";
-              const p = playerRef.current;
-              p.facing = "up";
-              p.waving = false;
-              counterDrinkRef.current = null;
-              dymasCraftingRef.current = {
-                drink: drinkId,
-                elapsed: 0,
-                serveX: Math.max(BAR_SERVE_RANGE.min, Math.min(BAR_SERVE_RANGE.max, p.x)),
-                lastSfx: 0,
-                lastStep: -1,
-              };
-              sound.playBlip();
-            } else if (id === "chat") {
-              onOpenDialog({
-                speaker: "💬 Dymas",
-                subtitle: "Ngobrol Santai",
-                pages: [
-                  "Dymas: 'Keren banget Zam karya-karya lu sekarang. Kapan-kapan luangkan waktu nongkrong lamaan ya bro!'",
-                  "Dymas: 'Kalau butuh mood booster pas nongkrong di AGL, tinggal pesen Sprite, Coca Cola, atau Pop Ice!'",
-                ],
-                tags: ["Barista Dymas", "Teman Rumah"],
-              });
-            }
-          },
-        });
-      } else if (npc.id === "valdy") {
-        onOpenDialog({
-          speaker: `${npc.name} (${npc.role})`,
-          subtitle: "AGL — Resident DJ",
-          pages: npc.pages,
-          tags: npc.tags,
-          choices: npc.choices,
-          onChoice: (id) => {
-            if (id === "drop_beat") {
-              sound.playDoor(true);
-              onOpenDialog({
-                speaker: "🎧 Valdy (DJ AGL)",
-                subtitle: "Drop The Beat",
-                pages: ["Valdy: '1, 2, 3... DROP! *BASS BOOSTED* Let's goooo! 🔥'"],
-                tags: ["Drop The Beat", "BASS"],
-              });
-            } else if (id === "chill_music") {
-              onOpenDialog({
-                speaker: "🎧 Valdy (DJ AGL)",
-                subtitle: "Lo-Fi Lounge",
-                pages: [
-                  "Valdy: 'Siap Zam, kita set tempo santai dulu biar enak buat ngobrol bareng Kaila, Syifa, sama Aliyah.'",
-                ],
-                tags: ["Chill Vibes"],
-              });
-            } else if (id === "compliment") {
-              onOpenDialog({
-                speaker: "✨ Valdy",
-                subtitle: "DJ AGL",
-                pages: [
-                  "Valdy: 'Hahaha thank you Zam! Lu emang paling ngerti selera musik yang enak!'",
-                ],
-              });
-            }
-          },
-        });
-      } else {
-        onOpenDialog({
-          speaker: `${npc.name} (${npc.role})`,
-          subtitle: "AGL — Teman Rumah",
-          pages: npc.pages,
-          tags: npc.tags,
-        });
-      }
-    },
-    [onOpenDialog],
-  );
+  const interactWithAglNpc = useCallback((npc: AglNpcData) => {
+    sound.playBlip();
+    if (npc.id === "dymas") {
+      if (dymasCraftingRef.current || playerDrinkingRef.current) return;
+      onOpenDialogRef.current({
+        speaker: `${npc.name} (${npc.role})`,
+        subtitle: "AGL — Bar & Lounge",
+        pages: npc.pages,
+        tags: npc.tags,
+        choices: npc.choices,
+        onChoice: (id) => {
+          if (id === "drink_sprite" || id === "drink_cola" || id === "drink_popice") {
+            const drinkId: DrinkId =
+              id === "drink_sprite" ? "sprite" : id === "drink_cola" ? "cola" : "popice";
+            const p = playerRef.current;
+            p.facing = "up";
+            p.waving = false;
+            counterDrinkRef.current = null;
+            dymasCraftingRef.current = {
+              drink: drinkId,
+              elapsed: 0,
+              serveX: Math.max(BAR_SERVE_RANGE.min, Math.min(BAR_SERVE_RANGE.max, p.x)),
+              lastSfx: 0,
+              lastStep: -1,
+            };
+            sound.playBlip();
+          } else if (id === "chat") {
+            onOpenDialogRef.current({
+              speaker: "💬 Dymas",
+              subtitle: "Ngobrol Santai",
+              pages: [
+                "Dymas: 'Keren banget Zam karya-karya lu sekarang. Kapan-kapan luangkan waktu nongkrong lamaan ya bro!'",
+                "Dymas: 'Kalau butuh mood booster pas nongkrong di AGL, tinggal pesen Sprite, Coca Cola, atau Pop Ice!'",
+              ],
+              tags: ["Barista Dymas", "Teman Rumah"],
+            });
+          }
+        },
+      });
+    } else if (npc.id === "valdy") {
+      onOpenDialogRef.current({
+        speaker: `${npc.name} (${npc.role})`,
+        subtitle: "AGL — Resident DJ",
+        pages: npc.pages,
+        tags: npc.tags,
+        choices: npc.choices,
+        onChoice: (id) => {
+          if (id === "drop_beat") {
+            sound.playDoor(true);
+            onOpenDialogRef.current({
+              speaker: "🎧 Valdy (DJ AGL)",
+              subtitle: "Drop The Beat",
+              pages: ["Valdy: '1, 2, 3... DROP! *BASS BOOSTED* Let's goooo! 🔥'"],
+              tags: ["Drop The Beat", "BASS"],
+            });
+          } else if (id === "chill_music") {
+            onOpenDialogRef.current({
+              speaker: "🎧 Valdy (DJ AGL)",
+              subtitle: "Lo-Fi Lounge",
+              pages: [
+                "Valdy: 'Siap Zam, kita set tempo santai dulu biar enak buat ngobrol bareng Kaila, Syifa, sama Aliyah.'",
+              ],
+              tags: ["Chill Vibes"],
+            });
+          } else if (id === "compliment") {
+            onOpenDialogRef.current({
+              speaker: "✨ Valdy",
+              subtitle: "DJ AGL",
+              pages: [
+                "Valdy: 'Hahaha thank you Zam! Lu emang paling ngerti selera musik yang enak!'",
+              ],
+            });
+          }
+        },
+      });
+    } else {
+      onOpenDialogRef.current({
+        speaker: `${npc.name} (${npc.role})`,
+        subtitle: "AGL — Teman Rumah",
+        pages: npc.pages,
+        tags: npc.tags,
+      });
+    }
+  }, []);
 
   const interactWithAglFurniture = useCallback(
     (item: AglFurnitureItem) => {
@@ -507,7 +748,7 @@ export default function GameCanvas({
           return;
         }
       }
-      onOpenDialog({
+      onOpenDialogRef.current({
         speaker: item.speaker,
         subtitle: "AGL Diskotik & Bar",
         pages: item.pages,
@@ -515,12 +756,29 @@ export default function GameCanvas({
         choices: item.choices,
       });
     },
-    [interactWithAglNpc, onOpenDialog, sitOn, transitionToScene],
+    [interactWithAglNpc, sitOn, transitionToScene],
   );
 
   const triggerInteract = useCallback(() => {
     sound.unlockAndStart();
+    if (sceneRef.current === "driving") {
+      const d = drivingRef.current;
+      if (d) {
+        d.honkTimer = 600;
+        sound.playHorn(d.vehicle === "moto");
+      }
+      return;
+    }
+
     if (sceneRef.current === "town") {
+      if (nearestGateRef.current) {
+        startDriving(nearestGateRef.current.toZone, "manual");
+        return;
+      }
+      if (nearParkingRef.current) {
+        openParkingDialog();
+        return;
+      }
       const near = nearestBuildingRef.current;
       if (!near) return;
       if (near.id === "home") {
@@ -529,7 +787,7 @@ export default function GameCanvas({
         transitionToScene("agl");
       } else {
         sound.playBlip();
-        onOpenBuilding(near);
+        onOpenBuildingRef.current(near);
       }
       return;
     }
@@ -565,17 +823,34 @@ export default function GameCanvas({
       interactWithFurniture(target.item);
     } else {
       sound.playMeow(target.cat.pitch);
-      onOpenDialog({
+      onOpenDialogRef.current({
         speaker: `🐱 ${target.cat.name} (Kucing ${target.cat.gender})`,
         subtitle: "Kucing Kesayangan Azzam",
         pages: target.cat.pages,
         tags: ["Cat Lover", target.cat.name],
       });
     }
-  }, [interactWithAglFurniture, interactWithAglNpc, interactWithFurniture, onOpenBuilding, onOpenDialog, openLaptopMenu, standUp, transitionToScene]);
+  }, [
+    interactWithAglFurniture,
+    interactWithAglNpc,
+    interactWithFurniture,
+    openLaptopMenu,
+    openParkingDialog,
+    standUp,
+    startDriving,
+    transitionToScene,
+  ]);
 
   const startWave = useCallback(() => {
     sound.unlockAndStart();
+    if (sceneRef.current === "driving") {
+      const d = drivingRef.current;
+      if (d) {
+        d.honkTimer = 650;
+        sound.playHorn(d.vehicle === "moto");
+      }
+      return;
+    }
     const p = playerRef.current;
     if (p.waving || p.pose === "sleep") return;
     p.waving = true;
@@ -593,19 +868,13 @@ export default function GameCanvas({
       },
       triggerWave: startWave,
       triggerInteract,
-      jumpTo: (x, y) => {
+      travelToZone: (targetZone, mode = "auto") => {
         sound.unlockAndStart();
-        if (sceneRef.current !== "town") return;
-        const p = playerRef.current;
-        p.x = x;
-        p.y = y;
-        p.facing = "down";
-        const canvas = canvasRef.current;
-        const vw = canvas?.clientWidth ?? 800;
-        const vh = canvas?.clientHeight ?? 600;
-        cameraRef.current.x = cameraTarget(x, vw, WORLD_WIDTH);
-        cameraRef.current.y = cameraTarget(y, vh, WORLD_HEIGHT);
-        onPlayerPos({ x, y });
+        startDriving(targetZone, mode);
+      },
+      skipDriving: () => {
+        sound.unlockAndStart();
+        finishDriving();
       },
       exitHouse: () => {
         if (sceneRef.current === "house" || sceneRef.current === "agl") {
@@ -616,7 +885,7 @@ export default function GameCanvas({
     return () => {
       apiRef.current = null;
     };
-  }, [apiRef, onPlayerPos, startWave, transitionToScene, triggerInteract]);
+  }, [apiRef, finishDriving, startDriving, startWave, transitionToScene, triggerInteract]);
 
   useEffect(() => {
     const setKey = (e: KeyboardEvent, pressed: boolean) => {
@@ -677,12 +946,47 @@ export default function GameCanvas({
     const onClick = (e: MouseEvent) => {
       sound.unlockAndStart();
       if (overlayOpenRef.current) return;
+      if (sceneRef.current === "driving") {
+        const d = drivingRef.current;
+        if (d) {
+          d.honkTimer = 600;
+          sound.playHorn(d.vehicle === "moto");
+        }
+        return;
+      }
+
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left + cameraRef.current.x;
       const my = e.clientY - rect.top + cameraRef.current.y;
 
       if (sceneRef.current === "town") {
-        const hit = [...buildings]
+        const curZone = zoneRef.current;
+        const cfg = TOWN_ZONES[curZone];
+
+        // Check click on Highway Gates
+        for (const gate of [cfg.leftGate, cfg.rightGate]) {
+          if (gate && Math.hypot(mx - gate.x, my - (gate.y - 25)) <= 68) {
+            startDriving(gate.toZone, "manual");
+            return;
+          }
+        }
+
+        // Check click on Parking Lot (Car or Moto)
+        const pSpot = cfg.parkingSpot;
+        if (Math.abs(mx - pSpot.x) <= 82 && Math.abs(my - pSpot.y) <= 44) {
+          // Clicking left half selects car, right half selects moto, and opens garage menu
+          const clickedV: VehicleType = mx < pSpot.x ? "car" : "moto";
+          if (clickedV !== vehicleRef.current) {
+            vehicleRef.current = clickedV;
+            onVehicleChangeRef.current(clickedV);
+            sound.playHorn(clickedV === "moto");
+          }
+          openParkingDialog();
+          return;
+        }
+
+        const zoneBlds = getZoneBuildings(curZone);
+        const hit = [...zoneBlds]
           .sort((a, b) => b.y - a.y)
           .find((b) => {
             const r = getBuildingBounds(b);
@@ -695,7 +999,7 @@ export default function GameCanvas({
             transitionToScene("agl");
           } else {
             sound.playBlip();
-            onOpenBuilding(hit);
+            onOpenBuildingRef.current(hit);
           }
         }
         return;
@@ -735,7 +1039,7 @@ export default function GameCanvas({
         const st = catStateRef.current[cat.id];
         if (Math.hypot(mx - st.x, my - (st.y - 10)) <= 26) {
           sound.playMeow(cat.pitch);
-          onOpenDialog({
+          onOpenDialogRef.current({
             speaker: `🐱 ${cat.name} (Kucing ${cat.gender})`,
             subtitle: "Kucing Kesayangan Azzam",
             pages: cat.pages,
@@ -762,7 +1066,15 @@ export default function GameCanvas({
     };
     canvas.addEventListener("click", onClick);
     return () => canvas.removeEventListener("click", onClick);
-  }, [interactWithAglFurniture, interactWithAglNpc, interactWithFurniture, onOpenBuilding, onOpenDialog, standUp, transitionToScene]);
+  }, [
+    interactWithAglFurniture,
+    interactWithAglNpc,
+    interactWithFurniture,
+    openParkingDialog,
+    standUp,
+    startDriving,
+    transitionToScene,
+  ]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -788,8 +1100,17 @@ export default function GameCanvas({
     resize();
     window.addEventListener("resize", resize);
 
-    cameraRef.current.x = cameraTarget(playerRef.current.x, window.innerWidth, WORLD_WIDTH);
-    cameraRef.current.y = cameraTarget(playerRef.current.y, window.innerHeight, WORLD_HEIGHT);
+    const startZoneCfg = TOWN_ZONES[zoneRef.current];
+    cameraRef.current.x = cameraTarget(
+      playerRef.current.x,
+      window.innerWidth,
+      startZoneCfg.width,
+    );
+    cameraRef.current.y = cameraTarget(
+      playerRef.current.y,
+      window.innerHeight,
+      startZoneCfg.height,
+    );
 
     const tick = (now: number) => {
       const dt = Math.min(40, now - last);
@@ -801,9 +1122,13 @@ export default function GameCanvas({
       const virt = virtualRef.current;
       const inHouse = sceneRef.current === "house";
       const inAgl = sceneRef.current === "agl";
+      const inDriving = sceneRef.current === "driving";
 
       if (exitCooldownRef.current > 0) {
         exitCooldownRef.current = Math.max(0, exitCooldownRef.current - dt);
+      }
+      if (gateCooldownRef.current > 0) {
+        gateCooldownRef.current = Math.max(0, gateCooldownRef.current - dt);
       }
 
       // Scene fade transition update
@@ -820,6 +1145,100 @@ export default function GameCanvas({
         if (fade.alpha <= 0) fade.dir = 0;
       }
 
+      // ==================== DRIVING SCENE UPDATE & RENDER ====================
+      if (inDriving && drivingRef.current) {
+        const d = drivingRef.current;
+        if (d.boosting > 0) d.boosting = Math.max(0, d.boosting - dt);
+        if (d.honkTimer > 0) d.honkTimer = Math.max(0, d.honkTimer - dt);
+
+        if (fade.dir === 0) {
+          let steerY = 0;
+          if (input.up || virt.up) steerY -= 1;
+          if (input.down || virt.down) steerY += 1;
+
+          const wantFast =
+            (d.direction === 1 && (input.right || virt.right)) ||
+            (d.direction === -1 && (input.left || virt.left));
+          const wantSlow =
+            (d.direction === 1 && (input.left || virt.left)) ||
+            (d.direction === -1 && (input.right || virt.right));
+
+          // Auto mode gently steers around traffic if user isn't pressing up/down
+          if (d.mode === "auto" && steerY === 0) {
+            const ahead = d.traffic.find(
+              (t) => t.x > d.distance && t.x - d.distance < 210 && Math.abs((t.lane - 1) * 0.65 - d.laneY) < 0.36,
+            );
+            if (ahead) {
+              const targetLaneY = ahead.lane === 1 ? -0.65 : 0;
+              steerY = targetLaneY < d.laneY ? -1 : 1;
+            }
+          }
+
+          d.laneY = Math.max(-0.82, Math.min(0.82, d.laneY + steerY * (dt * 0.0022)));
+
+          const baseTarget = d.mode === "auto" ? 430 : wantFast ? 420 : wantSlow ? 185 : 285;
+          const targetSpeed = baseTarget + (d.boosting > 0 ? 185 : 0);
+          d.speed += (targetSpeed - d.speed) * 0.12;
+
+          // Update traffic & check boost pads
+          for (const t of d.traffic) {
+            t.x += (t.speed * dt) / 1000;
+            const laneNorm = (t.lane - 1) * 0.65;
+            if (Math.abs(t.x - d.distance) < 48 && Math.abs(laneNorm - d.laneY) < 0.3) {
+              // Gentle bump / slow down behind traffic
+              d.speed = Math.min(d.speed, t.speed + 20);
+              if (d.honkTimer <= 0) {
+                d.honkTimer = 420;
+                sound.playHorn(d.vehicle === "moto");
+              }
+            }
+          }
+
+          for (const pad of d.boostPads) {
+            const laneNorm = (pad.lane - 1) * 0.65;
+            if (
+              !pad.collected &&
+              Math.abs(pad.x - d.distance) < 42 &&
+              Math.abs(laneNorm - d.laneY) < 0.36
+            ) {
+              pad.collected = true;
+              d.boosting = 950;
+              sound.playBoost();
+            }
+          }
+
+          if (input.wave && !waveLatch.current) {
+            waveLatch.current = true;
+            d.honkTimer = 650;
+            sound.playHorn(d.vehicle === "moto");
+          }
+          if (input.interact && !interactLatch.current) {
+            interactLatch.current = true;
+            d.honkTimer = 650;
+            sound.playHorn(d.vehicle === "moto");
+          }
+
+          const stepDist = (d.speed * dt) / 1000;
+          d.distance = Math.min(d.totalDistance, d.distance + stepDist);
+          d.scrollX += stepDist;
+
+          if (d.distance >= d.totalDistance) {
+            finishDriving();
+          }
+        }
+
+        ctx.clearRect(0, 0, viewW, viewH);
+        drawDrivingScene(ctx, viewW, viewH, d, now);
+
+        if (fade.alpha > 0.01) {
+          ctx.fillStyle = `rgba(18, 12, 8, ${fade.alpha})`;
+          ctx.fillRect(0, 0, viewW, viewH);
+        }
+
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
       // Dymas works through the recipe station by station
       let barista: BaristaFrame | null = null;
       const crafting = dymasCraftingRef.current;
@@ -831,7 +1250,13 @@ export default function GameCanvas({
           sound.playBlip();
         }
         const sfxGap =
-          barista.act === "blend" ? 220 : barista.act === "ice" ? 330 : barista.act === "pour" ? 420 : 0;
+          barista.act === "blend"
+            ? 220
+            : barista.act === "ice"
+              ? 330
+              : barista.act === "pour"
+                ? 420
+                : 0;
         if (sfxGap && now - crafting.lastSfx > sfxGap) {
           crafting.lastSfx = now;
           if (barista.act === "pour") sound.playSip();
@@ -889,6 +1314,9 @@ export default function GameCanvas({
         }
       }
 
+      const curZone = zoneRef.current;
+      const curZoneCfg = TOWN_ZONES[curZone];
+
       const canMove =
         !overlayOpenRef.current &&
         fade.dir === 0 &&
@@ -918,7 +1346,11 @@ export default function GameCanvas({
         player.vx = dx * PLAYER_SPEED;
         player.vy = dy * PLAYER_SPEED;
 
-        const blockFn = inAgl ? isAglBlocked : inHouse ? isHouseBlocked : isBlocked;
+        const blockFn = inAgl
+          ? isAglBlocked
+          : inHouse
+            ? isHouseBlocked
+            : (x: number, y: number) => isBlockedInZone(curZone, x, y);
         const nextX = player.x + (player.vx * dt) / 1000;
         if (!blockFn(nextX, player.y)) player.x = nextX;
         const nextY = player.y + (player.vy * dt) / 1000;
@@ -926,6 +1358,25 @@ export default function GameCanvas({
 
         if (Math.hypot(player.vx, player.vy) > 5) {
           sound.playStep();
+        }
+
+        // Auto-trigger manual driving when walking into a highway gate at the edge of the road
+        if (!inHouse && !inAgl && gateCooldownRef.current <= 0) {
+          if (
+            curZoneCfg.leftGate &&
+            dx < 0 &&
+            player.x < 40 &&
+            Math.abs(player.y - 350) < 34
+          ) {
+            startDriving(curZoneCfg.leftGate.toZone, "manual");
+          } else if (
+            curZoneCfg.rightGate &&
+            dx > 0 &&
+            player.x > curZoneCfg.width - 40 &&
+            Math.abs(player.y - 350) < 34
+          ) {
+            startDriving(curZoneCfg.rightGate.toZone, "manual");
+          }
         }
 
         // Auto-exit when walking onto the front doormat heading down
@@ -962,15 +1413,15 @@ export default function GameCanvas({
 
       updatePlayerAnimation(player, Math.hypot(player.vx, player.vy) > 1, dt);
 
-      const mapW = inAgl ? AGL_WIDTH : inHouse ? HOUSE_WIDTH : WORLD_WIDTH;
-      const mapH = inAgl ? AGL_HEIGHT : inHouse ? HOUSE_HEIGHT : WORLD_HEIGHT;
+      const mapW = inAgl ? AGL_WIDTH : inHouse ? HOUSE_WIDTH : curZoneCfg.width;
+      const mapH = inAgl ? AGL_HEIGHT : inHouse ? HOUSE_HEIGHT : curZoneCfg.height;
       const cam = cameraRef.current;
       cam.x += (cameraTarget(player.x, viewW, mapW) - cam.x) * CAMERA_LERP;
       cam.y += (cameraTarget(player.y, viewH, mapH) - cam.y) * CAMERA_LERP;
 
       if (Math.hypot(player.x - lastReport.x, player.y - lastReport.y) > 2) {
         lastReport = { x: player.x, y: player.y };
-        onPlayerPos(lastReport);
+        onPlayerPosRef.current(lastReport);
       }
 
       const worldCtx = {
@@ -985,34 +1436,54 @@ export default function GameCanvas({
       ctx.clearRect(0, 0, viewW, viewH);
 
       if (sceneRef.current === "town") {
-        // ==================== TOWN RENDER ====================
-        const near = findNearestBuilding(player.x, player.y);
-        nearestBuildingRef.current = near;
-        const label = near
-          ? near.id === "home"
-            ? "Masuk ke Rumah"
-            : near.id === "agl"
-              ? "Masuk ke AGL 🪩"
-              : near.name
-          : null;
+        // ==================== TOWN ZONE RENDER ====================
+        const nearGate = findNearestGate(curZone, player.x, player.y);
+        const nearPark = !nearGate && isNearParking(curZone, player.x, player.y);
+        const nearBld =
+          !nearGate && !nearPark
+            ? findNearestBuildingInZone(curZone, player.x, player.y)
+            : null;
+
+        nearestGateRef.current = nearGate;
+        nearParkingRef.current = nearPark;
+        nearestBuildingRef.current = nearBld;
+
+        const vIcon = vehicleRef.current === "car" ? "🚗" : "🏍️";
+        const label = nearGate
+          ? `${vIcon} Berkendara ke ${TOWN_ZONES[nearGate.toZone].shortLabel}`
+          : nearPark
+            ? "🅿️ Garasi & Pilih Kendaraan (Mobil / Motor)"
+            : nearBld
+              ? nearBld.id === "home"
+                ? "Masuk ke Rumah"
+                : nearBld.id === "agl"
+                  ? "Masuk ke AGL 🪩"
+                  : nearBld.name
+              : null;
+
         if (label !== lastLabel) {
           lastLabel = label;
-          onNearestLabelChange(label);
+          onNearestLabelChangeRef.current(label);
         }
 
-        for (const npc of npcs) {
+        const zoneBuildings = getZoneBuildings(curZone);
+        const zoneNpcs = getZoneNpcs(curZone);
+        const zoneDecor = getZoneDecor(curZone);
+
+        for (const npc of zoneNpcs) {
           const state = npcStateRef.current[npc.id];
-          state.waving = Math.hypot(player.x - npc.x, player.y - npc.y) <= NPC_GREET_DISTANCE;
-          state.animTime = state.waving ? state.animTime + dt : 0;
+          if (state) {
+            state.waving = Math.hypot(player.x - npc.x, player.y - npc.y) <= NPC_GREET_DISTANCE;
+            state.animTime = state.waving ? state.animTime + dt : 0;
+          }
         }
 
-        drawWorldGround(worldCtx);
+        drawWorldGround(worldCtx, curZone, vehicleRef.current, nearGate, nearPark);
 
         const items: TownDrawItem[] = [
-          ...decor.map((d, index) => ({ kind: "decor" as const, sortY: d.y, index })),
-          ...buildings.map((b, index) => ({ kind: "building" as const, sortY: b.y, index })),
-          ...npcs.map((n, index) => ({ kind: "npc" as const, sortY: n.y, index })),
-          { kind: "bridgeRail", sortY: BRIDGE_RAIL_SORT_Y },
+          ...zoneDecor.map((d, index) => ({ kind: "decor" as const, sortY: d.y, index })),
+          ...zoneBuildings.map((b, index) => ({ kind: "building" as const, sortY: b.y, index })),
+          ...zoneNpcs.map((n, index) => ({ kind: "npc" as const, sortY: n.y, index })),
           { kind: "player", sortY: player.y },
         ];
         items.sort((a, b) => a.sortY - b.sortY);
@@ -1020,35 +1491,52 @@ export default function GameCanvas({
         for (const item of items) {
           switch (item.kind) {
             case "decor":
-              drawDecor(worldCtx, decor[item.index]);
+              drawDecor(worldCtx, zoneDecor[item.index]);
               break;
             case "building":
               drawBuilding(
                 worldCtx,
-                buildings[item.index],
-                near?.id === buildings[item.index].id,
+                zoneBuildings[item.index],
+                nearBld?.id === zoneBuildings[item.index].id,
               );
               break;
             case "npc":
-              drawNpc(worldCtx, npcs[item.index], npcStateRef.current[npcs[item.index].id]);
-              break;
-            case "bridgeRail":
-              drawBridgeFrontRail(worldCtx);
+              drawNpc(
+                worldCtx,
+                zoneNpcs[item.index],
+                npcStateRef.current[zoneNpcs[item.index].id],
+              );
               break;
             case "player":
               drawPlayer(worldCtx, player, playerDrinkingRef.current);
           }
         }
 
-        if (near && !overlayOpenRef.current) {
-          const r = getBuildingBounds(near);
-          const hintText =
-            near.id === "home"
-              ? "E / klik untuk masuk rumah 🏠"
-              : near.id === "agl"
-                ? "E / klik untuk masuk AGL 🪩"
-                : "E / klik untuk buka";
-          drawHint(ctx, near.x - cam.x, r.top - cam.y - 4, hintText);
+        if (!overlayOpenRef.current) {
+          if (nearGate) {
+            drawHint(
+              ctx,
+              nearGate.x + (nearGate.direction === "right" ? -52 : 52) - cam.x,
+              nearGate.y - cam.y - 82,
+              `E / Jalan terus: Naik ${vehicleRef.current === "car" ? "Mobil 🚗" : "Motor 🏍️"}`,
+            );
+          } else if (nearPark) {
+            drawHint(
+              ctx,
+              curZoneCfg.parkingSpot.x - cam.x,
+              curZoneCfg.parkingSpot.y - cam.y - 42,
+              "E / klik: Pilih Mobil 🚗 / Motor 🏍️ & Berangkat",
+            );
+          } else if (nearBld) {
+            const r = getBuildingBounds(nearBld);
+            const hintText =
+              nearBld.id === "home"
+                ? "E / klik untuk masuk rumah 🏠"
+                : nearBld.id === "agl"
+                  ? "E / klik untuk masuk AGL 🪩"
+                  : "E / klik untuk buka";
+            drawHint(ctx, nearBld.x - cam.x, r.top - cam.y - 4, hintText);
+          }
         }
       } else if (sceneRef.current === "agl") {
         // ==================== AGL DISCO INTERIOR RENDER ====================
@@ -1068,7 +1556,11 @@ export default function GameCanvas({
           }
           for (const f of aglFurniture) {
             if (f.interactive === false) continue;
-            if (f.id === "bar_counter" && bestAglTarget?.kind === "npc" && bestAglTarget.npc.id === "dymas") {
+            if (
+              f.id === "bar_counter" &&
+              bestAglTarget?.kind === "npc" &&
+              bestAglTarget.npc.id === "dymas"
+            ) {
               continue;
             }
             const left = f.x - f.width / 2;
@@ -1077,7 +1569,6 @@ export default function GameCanvas({
             const bottom = f.y + 6;
             const ddx = Math.max(left - player.x, 0, player.x - right);
             const ddy = Math.max(top - player.y, 0, player.y - bottom);
-            // The bar counter is how you reach Dymas, so it wins over the stools in front of it
             const d = Math.hypot(ddx, ddy) + (f.id === "bar_counter" ? 0 : 6);
             if (d < bestDist) {
               bestDist = d;
@@ -1098,7 +1589,7 @@ export default function GameCanvas({
           : null;
         if (label !== lastLabel) {
           lastLabel = label;
-          onNearestLabelChange(label);
+          onNearestLabelChangeRef.current(label);
         }
 
         drawAglGround(worldCtx);
@@ -1159,7 +1650,12 @@ export default function GameCanvas({
           } else if (dymasTargeted) {
             drawHint(ctx, player.x - cam.x, below, "E / klik: Pesan Minuman ke Dymas 🥤");
           } else if (bestAglTarget?.kind === "npc") {
-            drawHint(ctx, player.x - cam.x, below, `E / klik: Ngobrol dengan ${bestAglTarget.npc.name}`);
+            drawHint(
+              ctx,
+              player.x - cam.x,
+              below,
+              `E / klik: Ngobrol dengan ${bestAglTarget.npc.name}`,
+            );
           } else if (bestAglTarget?.kind === "furniture") {
             const f = bestAglTarget.item;
             const text = f.isExit
@@ -1172,7 +1668,6 @@ export default function GameCanvas({
         }
       } else {
         // ==================== HOUSE INTERIOR RENDER ====================
-        // Update cats roaming & greeting
         for (const cat of houseCats) {
           const st = catStateRef.current[cat.id];
           const distToPlayer = Math.hypot(player.x - st.x, player.y - st.y);
@@ -1219,7 +1714,6 @@ export default function GameCanvas({
           }
         }
 
-        // Find nearest interactive target inside house (cat or furniture)
         let bestTarget: HouseTarget | null = null;
         if (player.pose === "stand") {
           let bestDist = 40;
@@ -1233,7 +1727,6 @@ export default function GameCanvas({
           }
           for (const f of houseFurniture) {
             if (f.interactive === false) continue;
-            // Distance from the player's feet to the furniture footprint
             const r = getFurnitureRect(f);
             const ddx = Math.max(r.left - player.x, 0, player.x - r.right);
             const ddy = Math.max(r.top - player.y, 0, player.y - r.bottom);
@@ -1253,7 +1746,7 @@ export default function GameCanvas({
           : null;
         if (label !== lastLabel) {
           lastLabel = label;
-          onNearestLabelChange(label);
+          onNearestLabelChangeRef.current(label);
         }
 
         drawHouseGround(worldCtx);
@@ -1289,8 +1782,7 @@ export default function GameCanvas({
             case "cat": {
               const c = houseCats[it.index];
               const st = catStateRef.current[c.id];
-              const isNear =
-                Math.hypot(player.x - st.x, player.y - st.y) <= 78;
+              const isNear = Math.hypot(player.x - st.x, player.y - st.y) <= 78;
               drawCat(worldCtx, c, st, isNear);
               break;
             }
@@ -1322,12 +1814,22 @@ export default function GameCanvas({
                 : seat?.action === "laptop"
                   ? "E: buka menu laptop · tombol arah: berdiri"
                   : "E / tombol arah untuk berdiri";
-            // While sleeping, keep the hint below the bed so the face on the pillow stays visible
-            drawHint(ctx, player.x - cam.x, player.y - cam.y + (player.pose === "sleep" ? 72 : -52), text);
+            drawHint(
+              ctx,
+              player.x - cam.x,
+              player.y - cam.y + (player.pose === "sleep" ? 72 : -52),
+              text,
+            );
           } else if (bestTarget?.kind === "furniture") {
             const f = bestTarget.item;
             const verb =
-              f.action === "sit" ? "duduk" : f.action === "laptop" ? "duduk di laptop" : f.action === "bed" ? "kasur" : f.name;
+              f.action === "sit"
+                ? "duduk"
+                : f.action === "laptop"
+                  ? "duduk di laptop"
+                  : f.action === "bed"
+                    ? "kasur"
+                    : f.name;
             drawHint(
               ctx,
               f.x - cam.x,
@@ -1359,7 +1861,7 @@ export default function GameCanvas({
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
     };
-  }, [onNearestLabelChange, onPlayerPos, standUp, startWave, transitionToScene, triggerInteract]);
+  }, [finishDriving, standUp, startDriving, startWave, transitionToScene, triggerInteract]);
 
   return (
     <canvas

@@ -47,7 +47,7 @@ export const AGL_WIDTH = 920;
 export const AGL_HEIGHT = 640;
 
 export const AGL_SPAWN = { x: 460, y: 550 };
-export const TOWN_AGL_DOOR = { x: 1150, y: 580 };
+export const TOWN_AGL_DOOR = { x: 740, y: 288 };
 
 /** Bottom edge of the tall back wall face */
 export const AGL_BACK_WALL_BOTTOM = 112;

@@ -105,7 +105,7 @@ export const HOUSE_HEIGHT = 640;
 export const HOUSE_SPAWN = { x: 460, y: 555 };
 
 /** Where the player returns in town when stepping out of the house */
-export const TOWN_HOUSE_DOOR = { x: 140, y: 280 };
+export const TOWN_HOUSE_DOOR = { x: 180, y: 288 };
 
 /** Drop the PNG here: public/images/family-photo.png */
 export const FAMILY_PHOTO_SRC = "/images/family-photo.jpeg";

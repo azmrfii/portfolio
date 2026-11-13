@@ -1,4 +1,6 @@
 export type BuildingKind = "home" | "school" | "office" | "shop" | "hangout";
+export type TownZone = "home_zone" | "edu_zone" | "work_zone";
+export type VehicleType = "car" | "moto";
 
 export type BuildingId =
   | "home"
@@ -43,6 +45,7 @@ export interface BuildingVisual {
 
 export interface BuildingData {
   id: BuildingId;
+  zone: TownZone;
   kind: BuildingKind;
   name: string;
   shortLabel: string;
@@ -69,6 +72,7 @@ export interface CharacterLook {
 
 export interface NpcData {
   id: string;
+  zone: TownZone;
   buildingId: BuildingId;
   name: string;
   gender: "male" | "female";
@@ -84,22 +88,49 @@ export interface NpcData {
 
 export interface DecorItem {
   id: string;
+  zone: TownZone;
   kind: "tree" | "pine" | "bush" | "rock" | "flowers" | "lamp";
   x: number;
   y: number;
 }
 
-export const WORLD_WIDTH = 1360;
-export const WORLD_HEIGHT = 770;
-export const PLAYER_SPEED = 150;
+export interface GateConfig {
+  x: number;
+  y: number;
+  toZone: TownZone;
+  label: string;
+  direction: "left" | "right";
+}
+
+export interface ZoneConfig {
+  id: TownZone;
+  title: string;
+  shortLabel: string;
+  subtitle: string;
+  width: number;
+  height: number;
+  road: { x: number; y: number }[];
+  defaultSpawn: { x: number; y: number };
+  spawnFromLeft?: { x: number; y: number };
+  spawnFromRight?: { x: number; y: number };
+  leftGate?: GateConfig;
+  rightGate?: GateConfig;
+  parkingSpot: { x: number; y: number };
+  pond?: { x: number; y: number; rx: number; ry: number };
+}
+
+export const ROAD_Y = 350;
+export const ROW_BASE = 260;
+export const ROAD_WIDTH = 42;
+export const PLAYER_SPEED = 155;
 export const CAMERA_LERP = 0.12;
-export const INTERACT_DISTANCE = 80;
+export const INTERACT_DISTANCE = 82;
 export const NPC_GREET_DISTANCE = 90;
 
 /** Oblique projection used for building side faces & roofs */
 export const OBLIQUE = { x: 0.55, y: 0.42 };
 
-export const PLAYER_START = { x: 150, y: 340 };
+export const PLAYER_START = { x: 180, y: ROAD_Y };
 
 export const PLAYER_LOOK: CharacterLook = {
   skin: "#f6cfa8",
@@ -110,47 +141,97 @@ export const PLAYER_LOOK: CharacterLook = {
   shoes: "#4a2f22",
 };
 
-export const JUMP_TARGETS: { id: string; label: string; x: number; y: number }[] = [
-  { id: "home", label: "Rumah", x: 150, y: 340 },
-  { id: "schools", label: "Sekolah", x: 520, y: 340 },
-  { id: "campus", label: "Kuliah", x: 930, y: 650 },
-  { id: "offices", label: "Kantor", x: 380, y: 650 },
-  { id: "coffee", label: "Kopi", x: 1060, y: 340 },
-  { id: "agl", label: "AGL", x: 1150, y: 650 },
-];
+export const TOWN_ZONES: Record<TownZone, ZoneConfig> = {
+  home_zone: {
+    id: "home_zone",
+    title: "🏠 Map 1: Area Rumah & Nongkrong",
+    shortLabel: "🏠 Rumah & AGL",
+    subtitle: "Rumah Azzam, Garasi Kendaraan, Stand Kopi & Diskotik AGL",
+    width: 960,
+    height: 540,
+    road: [
+      { x: 90, y: ROAD_Y },
+      { x: 930, y: ROAD_Y },
+    ],
+    defaultSpawn: { x: 180, y: ROAD_Y },
+    spawnFromRight: { x: 820, y: ROAD_Y },
+    parkingSpot: { x: 365, y: 265 },
+    rightGate: {
+      x: 900,
+      y: ROAD_Y,
+      toZone: "edu_zone",
+      label: "Ke Kawasan Pendidikan 🎓",
+      direction: "right",
+    },
+  },
+  edu_zone: {
+    id: "edu_zone",
+    title: "🎓 Map 2: Kawasan Pendidikan",
+    shortLabel: "🎓 Pendidikan",
+    subtitle: "TK Ar Rofa, SD Fathan Mubina, SMP Roudlotul Jannah, SMK & Universitas Telkom",
+    width: 1220,
+    height: 540,
+    road: [
+      { x: 30, y: ROAD_Y },
+      { x: 1190, y: ROAD_Y },
+    ],
+    defaultSpawn: { x: 190, y: ROAD_Y },
+    spawnFromLeft: { x: 135, y: ROAD_Y },
+    spawnFromRight: { x: 1085, y: ROAD_Y },
+    parkingSpot: { x: 190, y: 445 },
+    leftGate: {
+      x: 65,
+      y: ROAD_Y,
+      toZone: "home_zone",
+      label: "Ke Rumah & AGL 🏠",
+      direction: "left",
+    },
+    rightGate: {
+      x: 1155,
+      y: ROAD_Y,
+      toZone: "work_zone",
+      label: "Ke Kawasan Kantor 💼",
+      direction: "right",
+    },
+  },
+  work_zone: {
+    id: "work_zone",
+    title: "💼 Map 3: Kawasan Pekerjaan",
+    shortLabel: "💼 Pekerjaan",
+    subtitle: "CV Sinang Permata Group, PT. Geomatika Satelit Indonesia & PT. Adidata Informatika",
+    width: 1020,
+    height: 560,
+    road: [
+      { x: 30, y: ROAD_Y },
+      { x: 910, y: ROAD_Y },
+    ],
+    defaultSpawn: { x: 260, y: ROAD_Y },
+    spawnFromLeft: { x: 140, y: ROAD_Y },
+    parkingSpot: { x: 220, y: 445 },
+    pond: { x: 580, y: 465, rx: 68, ry: 44 },
+    leftGate: {
+      x: 65,
+      y: ROAD_Y,
+      toZone: "edu_zone",
+      label: "Ke Kawasan Pendidikan 🎓",
+      direction: "left",
+    },
+  },
+};
 
-/** Row 1 (schools) runs left→right, then the road turns down and row 2 (campus → offices) runs back right→left */
-export const ROW1_Y = 340;
-export const ROW2_Y = 650;
-/** Gap between a building's ground line and the center of the road in front of it */
-const ROAD_GAP = 90;
-const ROW1_BASE = ROW1_Y - ROAD_GAP;
-const ROW2_BASE = ROW2_Y - ROAD_GAP;
-
-/** Simple U-shaped road: two straight streets joined by one connector */
-export const road: { x: number; y: number }[] = [
-  { x: 110, y: ROW1_Y },
-  { x: 1280, y: ROW1_Y },
-  { x: 1280, y: ROW2_Y },
-  { x: 110, y: ROW2_Y },
-];
-export const ROAD_WIDTH = 40;
-
-/** Pond sits on row 2, between campus and the first office */
-export const pond = { x: 745, y: ROW2_Y, rx: 72, ry: 56 };
-
-/** Bridge spans the whole pond so both ends land on grass/road */
-export const bridge = { x: 745, y: ROW2_Y, width: 184, deckHeight: 58, walkHalfHeight: 18 };
+export const ZONE_ORDER: TownZone[] = ["home_zone", "edu_zone", "work_zone"];
 
 export const buildings: BuildingData[] = [
+  // ==================== MAP 1: HOME & HANGOUT ====================
   {
     id: "home",
+    zone: "home_zone",
     kind: "home",
     name: "Rumah",
     shortLabel: "Rumah",
-    signLines: [],
-    x: 140,
-    y: ROW1_BASE,
+    signLines: ["Azzam's Home"],
+    x: 180,
+    y: ROW_BASE,
     hasFloatingIcon: true,
     visual: {
       style: "home",
@@ -170,7 +251,7 @@ export const buildings: BuildingData[] = [
       subtitle: "Halo! Selamat datang di kotaku 🌿",
       paragraphs: [
         "Aku Azzam — developer yang suka membangun pengalaman interaktif.",
-        "Jelajahi jalan kota: dekati bangunan lalu tekan E, atau klik bangunannya untuk membuka cerita.",
+        "Jelajahi jalan kota: dekati bangunan lalu tekan E, atau naik mobil/motor ke kawasan Pendidikan & Pekerjaan.",
       ],
       bullets: [
         "Fokus: Frontend, product craft, UX",
@@ -181,129 +262,14 @@ export const buildings: BuildingData[] = [
     },
   },
   {
-    id: "tk",
-    kind: "school",
-    name: "TK Ar Rofa",
-    shortLabel: "TK",
-    signLines: ["Ar Rofa"],
-    x: 330,
-    y: ROW1_BASE,
-    visual: {
-      style: "school",
-      width: 96,
-      wallHeight: 50,
-      depth: 54,
-      roofHeight: 30,
-      floors: 1,
-      wallColor: "#ffe9a8",
-      roofColor: "#ef7d4f",
-      trimColor: "#d97706",
-      windowColor: "#9fd0ff",
-      doorColor: "#b45309",
-    },
-    modal: {
-      title: "TK — Langsung TK B",
-      subtitle: "Ga begitu inget banyak pas TK",
-      paragraphs: ["Fyi dulu pas TK sempet 3x pindah karena ku ga tau mau ngapain, sehari sekolah langsung nanya kapan libur? xixi"],
-      bullets: ["Bocil sewajarnya"],
-      tags: ["Kebanyakan main"],
-    },
-  },
-  {
-    id: "sd",
-    kind: "school",
-    name: "MI Fathan Mubina",
-    shortLabel: "SD",
-    signLines: ["Fathan Mubina"],
-    x: 520,
-    y: ROW1_BASE,
-    visual: {
-      style: "school",
-      width: 110,
-      wallHeight: 58,
-      depth: 60,
-      roofHeight: 32,
-      floors: 1,
-      wallColor: "#f4f1ea",
-      roofColor: "#c0392b",
-      trimColor: "#b91c1c",
-      windowColor: "#bfe3f5",
-      doorColor: "#7f1d1d",
-    },
-    modal: {
-      title: "SD — Dasar Pengetahuan",
-      subtitle: "Membangun kebiasaan belajar",
-      paragraphs: ["Sebenernya pindah ke sini pas kelas 2, karena bokap kerja di daerah bogor, bocil SD yang pendek akhirnya mendapatkan banyak teman walau tidak bisa mendapatkan ranking pertama sebagai laki-laki di SD ini (ranking 2 terus hufttt)."],
-      bullets: ["OSN MTK (Harapan dua tingkat kecamatan, kabupaten? ya gagal lah wong belajar sendiri dibuku ga diajari wkwk)", "MTK dan Mendapatkan Uang adalah hal yang menyenangkan"],
-      tags: ["Pondasi ilmu"],
-    },
-  },
-  {
-    id: "smp",
-    kind: "school",
-    name: "SMPIT Roudlotul Jannah",
-    shortLabel: "SMP",
-    signLines: ["Roudlotul Jannah"],
-    x: 710,
-    y: ROW1_BASE,
-    visual: {
-      style: "school",
-      width: 110,
-      wallHeight: 60,
-      depth: 60,
-      roofHeight: 30,
-      floors: 1,
-      wallColor: "#eef3f8",
-      roofColor: "#2563eb",
-      trimColor: "#1e3a8a",
-      windowColor: "#cfeefe",
-      doorColor: "#1e3a8a",
-    },
-    modal: {
-      title: "SMP — Eksplorasi Minat",
-      subtitle: "Mulai tertarik akan beberapa hal",
-      paragraphs: ["Punya banyak teman tercinta, cerita yang seru, sahabat yang baik disini, guru-guru yang selalu support walau udah jadi alumni, I miss you all my friends (second class), jangan berisik pas jamkos yeahh, sempet punya crush.."],
-      bullets: ["Wakil Ketua Osis 2017-2018", "Ketua Osis 2018-2019", "Lomba MTK walau ga menang", "Ikut pelajaran MTK di kelas 9 padahal masih kelas 8"],
-      tags: ["Mencoba banyak hal"],
-    },
-  },
-  {
-    id: "sma",
-    kind: "school",
-    name: "SMK Wikrama Garut (Tahun ke-1) · Farmako Medika Plus (Tahun ke-2 & 3)",
-    shortLabel: "SMK",
-    signLines: ["Wikrama Garut (Thn 1)", "Farmako Medika Plus (Thn 2-3)"],
-    x: 900,
-    y: ROW1_BASE,
-    visual: {
-      style: "school",
-      width: 120,
-      wallHeight: 80,
-      depth: 62,
-      roofHeight: 30,
-      floors: 2,
-      wallColor: "#ece6dc",
-      roofColor: "#6b7280",
-      trimColor: "#374151",
-      windowColor: "#cde7f7",
-      doorColor: "#374151",
-    },
-    modal: {
-      title: "SMK — Ini Arahnya kemana?",
-      subtitle: "Ko dewasa secepat ini?",
-      paragraphs: ["Boarding cuman setaun (tapi punya temen yang seru disana), terus pindah deh ke SMK yang gatau ini sekolah apaan, eh ternyata temen-nya pada seru, sefrekuensi, baik-baik, gurunya juga seruu, eh tiba-tiba ketemu crush juga karena sempet ngeliat dia salim ke bokapnya saat di anterin sekolah (jadi inget pas kecil sering gitu), and then i'm falling in love with her.."],
-      bullets: ["Lomba MTK Peraih medali Emas (Nasional - Daring) - WK Garut", "Lomba MTK Peraih medali Perak (Nasional - Daring) - WK Garut", "Lomba MTK Peraih medali Perunggu (Nasional - Daring) - WK Garut", "Persiapan kuliah IT", "Pendiri eskul Basket - FMK", "Juara kelas dari semester 4 s.d Lulus - FMK"],
-      tags: ["Pertemanan", "Fokus"],
-    },
-  },
-  {
     id: "coffee",
+    zone: "home_zone",
     kind: "shop",
     name: "Stand Kopi",
     shortLabel: "Kopi ☕",
     signLines: ["Ngopi dulu"],
-    x: 1060,
-    y: ROW1_BASE,
+    x: 540,
+    y: ROW_BASE,
     visual: {
       style: "coffee",
       width: 72,
@@ -320,22 +286,197 @@ export const buildings: BuildingData[] = [
     },
     modal: {
       title: "Stand Kopi — Ngopi Dulu",
-      subtitle: "Bahan bakar sebelum ngoding",
+      subtitle: "Bahan bakar sebelum berangkat",
       paragraphs: [
-        "(Placeholder) Mampir bentar sebelum lanjut perjalanan. Ceritain kopi favoritmu di sini — misalnya es kopi susu gula aren, americano, atau manual brew.",
+        "(Placeholder) Mampir bentar sebelum berangkat naik mobil/motor. Ceritain kopi favoritmu di sini — misalnya es kopi susu gula aren, americano, atau manual brew.",
       ],
       bullets: ["Menu favorit: (isi nanti)", "Tempat ngopi langganan: (isi nanti)"],
       tags: ["Coffee", "Ngopi"],
     },
   },
   {
+    id: "agl",
+    zone: "home_zone",
+    kind: "hangout",
+    name: "AGL",
+    shortLabel: "AGL",
+    signLines: ["Teman Rumah"],
+    x: 740,
+    y: ROW_BASE,
+    visual: {
+      style: "disco",
+      width: 116,
+      wallHeight: 78,
+      depth: 58,
+      roofHeight: 0,
+      floors: 1,
+      wallColor: "#2a1f3d",
+      roofColor: "#1c1530",
+      trimColor: "#ec4899",
+      windowColor: "#a855f7",
+      doorColor: "#0f0a1a",
+      extraTop: 24,
+    },
+    modal: {
+      title: "AGL — Teman Rumah",
+      subtitle: "Tempat nongkrong bareng teman-teman rumah 🪩",
+      paragraphs: [
+        "Markas teman-teman rumah — tempat ngumpul, ketawa, dan cerita sampai lupa waktu.",
+      ],
+      bullets: ["Barista: Dymas", "DJ: Valdy", "Crew: Rafly, Noval, Kaila, Syifa, Aliyah"],
+      tags: ["Friends", "Hangout", "AGL"],
+    },
+  },
+
+  // ==================== MAP 2: EDUCATION ====================
+  {
+    id: "tk",
+    zone: "edu_zone",
+    kind: "school",
+    name: "TK Ar Rofa",
+    shortLabel: "TK",
+    signLines: ["Ar Rofa"],
+    x: 190,
+    y: ROW_BASE,
+    visual: {
+      style: "school",
+      width: 96,
+      wallHeight: 50,
+      depth: 54,
+      roofHeight: 30,
+      floors: 1,
+      wallColor: "#ffe9a8",
+      roofColor: "#ef7d4f",
+      trimColor: "#d97706",
+      windowColor: "#9fd0ff",
+      doorColor: "#b45309",
+    },
+    modal: {
+      title: "TK — Langsung TK B",
+      subtitle: "Ga begitu inget banyak pas TK",
+      paragraphs: [
+        "Fyi dulu pas TK sempet 3x pindah karena ku ga tau mau ngapain, sehari sekolah langsung nanya kapan libur? xixi",
+      ],
+      bullets: ["Bocil sewajarnya"],
+      tags: ["Kebanyakan main"],
+    },
+  },
+  {
+    id: "sd",
+    zone: "edu_zone",
+    kind: "school",
+    name: "MI Fathan Mubina",
+    shortLabel: "SD",
+    signLines: ["Fathan Mubina"],
+    x: 390,
+    y: ROW_BASE,
+    visual: {
+      style: "school",
+      width: 110,
+      wallHeight: 58,
+      depth: 60,
+      roofHeight: 32,
+      floors: 1,
+      wallColor: "#f4f1ea",
+      roofColor: "#c0392b",
+      trimColor: "#b91c1c",
+      windowColor: "#bfe3f5",
+      doorColor: "#7f1d1d",
+    },
+    modal: {
+      title: "SD — Dasar Pengetahuan",
+      subtitle: "Membangun kebiasaan belajar",
+      paragraphs: [
+        "Sebenernya pindah ke sini pas kelas 2, karena bokap kerja di daerah bogor, bocil SD yang pendek akhirnya mendapatkan banyak teman walau tidak bisa mendapatkan ranking pertama sebagai laki-laki di SD ini (ranking 2 terus hufttt).",
+      ],
+      bullets: [
+        "OSN MTK (Harapan dua tingkat kecamatan, kabupaten? ya gagal lah wong belajar sendiri dibuku ga diajari wkwk)",
+        "MTK dan Mendapatkan Uang adalah hal yang menyenangkan",
+      ],
+      tags: ["Pondasi ilmu"],
+    },
+  },
+  {
+    id: "smp",
+    zone: "edu_zone",
+    kind: "school",
+    name: "SMPIT Roudlotul Jannah",
+    shortLabel: "SMP",
+    signLines: ["Roudlotul Jannah"],
+    x: 590,
+    y: ROW_BASE,
+    visual: {
+      style: "school",
+      width: 118,
+      wallHeight: 62,
+      depth: 62,
+      roofHeight: 32,
+      floors: 1,
+      wallColor: "#eef2f9",
+      roofColor: "#2563eb",
+      trimColor: "#1d4ed8",
+      windowColor: "#c4e4ff",
+      doorColor: "#1e3a8a",
+    },
+    modal: {
+      title: "SMP — Eksplorasi Minat",
+      subtitle: "Mulai kenal teknologi & organisasi",
+      paragraphs: [
+        "Masa SMP jadi titik awal ketertarikan pada komputer, desain, dan kegiatan ekstrakurikuler.",
+        "Mulai sering ngulik hal-hal baru bareng teman.",
+      ],
+      bullets: ["Aktif kegiatan sekolah", "Mulai suka dunia digital", "Belajar kerja tim"],
+      tags: ["Eksplorasi", "Organisasi"],
+    },
+  },
+  {
+    id: "sma",
+    zone: "edu_zone",
+    kind: "school",
+    name: "SMK Wikrama Garut & Farmako Medika Plus",
+    shortLabel: "SMK",
+    signLines: ["Wikrama Garut (Thn 1)", "Farmako Medika Plus (Thn 2–3)"],
+    x: 800,
+    y: ROW_BASE,
+    visual: {
+      style: "school",
+      width: 120,
+      wallHeight: 80,
+      depth: 62,
+      roofHeight: 30,
+      floors: 2,
+      wallColor: "#ece6dc",
+      roofColor: "#6b7280",
+      trimColor: "#374151",
+      windowColor: "#cde7f7",
+      doorColor: "#374151",
+    },
+    modal: {
+      title: "SMK — Ini Arahnya kemana?",
+      subtitle: "Ko dewasa secepat ini?",
+      paragraphs: [
+        "Boarding cuman setaun (tapi punya temen yang seru disana), terus pindah deh ke SMK yang gatau ini sekolah apaan, eh ternyata temen-nya pada seru, sefrekuensi, baik-baik, gurunya juga seruu, eh tiba-tiba ketemu crush juga karena sempet ngeliat dia salim ke bokapnya saat di anterin sekolah (jadi inget pas kecil sering gitu), and then i'm falling in love with her..",
+      ],
+      bullets: [
+        "Lomba MTK Peraih medali Emas (Nasional - Daring) - WK Garut",
+        "Lomba MTK Peraih medali Perak (Nasional - Daring) - WK Garut",
+        "Lomba MTK Peraih medali Perunggu (Nasional - Daring) - WK Garut",
+        "Persiapan kuliah IT",
+        "Pendiri eskul Basket - FMK",
+        "Juara kelas dari semester 4 s.d Lulus - FMK",
+      ],
+      tags: ["Pertemanan", "Fokus"],
+    },
+  },
+  {
     id: "kuliah",
+    zone: "edu_zone",
     kind: "school",
     name: "Universitas Telkom",
     shortLabel: "Kuliah",
     signLines: ["Universitas Telkom"],
-    x: 940,
-    y: ROW2_BASE,
+    x: 1030,
+    y: ROW_BASE,
     visual: {
       style: "campus",
       width: 140,
@@ -355,51 +496,25 @@ export const buildings: BuildingData[] = [
       paragraphs: [
         "Ngambil ilmu sekalian gelar karena kerja butuh gelar sarjana, temen ada cuman sebatas online itupun untuk tugas aja karena masing-masing punya kerjaan dan kehidupannya pribadi",
       ],
-      bullets: ["Kuliah Online", "RAM beberapa matkul karena sudah kerja", "Aku mencintaimu LMS saat menjelang UAS"],
+      bullets: [
+        "Kuliah Online",
+        "RAM beberapa matkul karena sudah kerja",
+        "Aku mencintaimu LMS saat menjelang UAS",
+      ],
       tags: ["Engineering", "Informatika"],
     },
   },
-  {
-    id: "agl",
-    kind: "hangout",
-    name: "AGL",
-    shortLabel: "AGL",
-    signLines: ["Teman Rumah"],
-    x: 1150,
-    y: ROW2_BASE,
-    visual: {
-      style: "disco",
-      width: 116,
-      wallHeight: 78,
-      depth: 58,
-      roofHeight: 0,
-      floors: 1,
-      wallColor: "#2a1f3d",
-      roofColor: "#1c1530",
-      trimColor: "#ec4899",
-      windowColor: "#a855f7",
-      doorColor: "#0f0a1a",
-      extraTop: 24,
-    },
-    modal: {
-      title: "AGL — Teman Rumah",
-      subtitle: "Tempat nongkrong bareng teman-teman rumah 🪩",
-      paragraphs: [
-        "(Placeholder) Ini markasnya teman-teman rumah — tempat ngumpul, ketawa, dan cerita sampai lupa waktu.",
-        "Isi nanti: siapa aja anggotanya, asal-usul nama AGL, dan momen paling seru bareng mereka.",
-      ],
-      bullets: ["Anggota: (isi nanti)", "Kegiatan favorit: (isi nanti)", "Momen paling berkesan: (isi nanti)"],
-      tags: ["Friends", "Hangout", "AGL"],
-    },
-  },
+
+  // ==================== MAP 3: WORK / OFFICES ====================
   {
     id: "office1",
+    zone: "work_zone",
     kind: "office",
     name: "CV Sinang Permata Group",
     shortLabel: "Office 1",
     signLines: ["CV Sinang Permata Group"],
-    x: 560,
-    y: ROW2_BASE,
+    x: 260,
+    y: ROW_BASE,
     visual: {
       style: "office",
       width: 96,
@@ -417,47 +532,76 @@ export const buildings: BuildingData[] = [
       title: "Pengalaman Kerja — Internship",
       subtitle: "Web Developer — Juli 2022 s.d Sept. 2022",
       paragraphs: ["Fokus di slicing figma ke website, full remote pas masih SMK."],
-      bullets: ["CMS Development: Built and managed a custom CMS for company profiles to streamline content management efficiency", "UI/UX Implementation: Translated Figma designs into responsive and interactive frontend code following industry standards", "Performance Optimization: Enhanced website functionality and speed by implementing clean code and web best practices"],
+      bullets: [
+        "CMS Development: Built and managed a custom CMS for company profiles to streamline content management efficiency",
+        "UI/UX Implementation: Translated Figma designs into responsive and interactive frontend code following industry standards",
+        "Performance Optimization: Enhanced website functionality and speed by implementing clean code and web best practices",
+      ],
       tags: ["Laravel", "Github", "PHP", "MySQL", "JavaScript", "Trello", "CSS"],
     },
   },
   {
     id: "office2",
+    zone: "work_zone",
     kind: "office",
     name: "PT. Geomatika Satelit Indonesia",
     shortLabel: "Office 2",
     signLines: ["PT. Geomatika Satelit", "Indonesia"],
-    x: 375,
-    y: ROW2_BASE,
+    x: 520,
+    y: ROW_BASE,
     visual: {
       style: "office",
-      width: 104,
-      wallHeight: 96,
-      depth: 58,
+      width: 100,
+      wallHeight: 88,
+      depth: 56,
       roofHeight: 0,
-      floors: 4,
-      wallColor: "#e7dccb",
-      roofColor: "#a8977d",
-      trimColor: "#7c5f3c",
-      windowColor: "#7cc6e6",
-      doorColor: "#3b2a1a",
+      floors: 3,
+      wallColor: "#d9cfc1",
+      roofColor: "#8c7f70",
+      trimColor: "#6b5d4d",
+      windowColor: "#82c5ea",
+      doorColor: "#3f352b",
     },
     modal: {
-      title: "Pengalaman Kerja — Full-Time",
-      subtitle: "IT Programmer — Okt. 2023 s.d Sept. 2025",
-      paragraphs: ["Kantor pertama yang nerima saat ku baru lulus SMK, ketemu rekan kerja, sahabat, crush, atasan yang seru pol dan baik."],
-      bullets: ["End-to-End Development: Engineered and maintained full-cycle web systems (Laravel) and mobile applications (Flutter), covering development, testing, and deployment", "Performance Optimization: Optimized RESTful APIs, successfully reducing data load times by over 60% (from 25s to under 10s) to enhance system stability", "System Integration: Collaborated with hardware teams to ensure seamless AIS data integration and secure delivery of maritime tracking data to the Ministry (KKP)", "Release Management: Managed the end-to-end mobile release lifecycle on Play Store and served as a technical liaison between management and engineering teams"],
-      tags: ["Laravel", "Flutter", "Golang", "Python", "REST APIs", "MySQL", "jQuery", "JavaScript", "Google Play Console", "cPanel", "Canva", "Trello", "GitHub", "Node.js"],
+      title: "Pengalaman Kerja — Fulltime",
+      subtitle: "IT Developer — Mei 2023 s.d Sept. 2025",
+      paragraphs: [
+        "Awal masuk karena diajak senior saat di SMK dulu untuk bantu dia di perusahaan ini, saat beliau resign ku menggantikan posisi beliau dan menjadi kartap di tahun 2024 bulan Februari.",
+      ],
+      bullets: [
+        "Full-Stack Web & GIS Development: Engineered and maintained high-performance web applications, including WebGIS and Custom CMS, using Python, Golang, and Laravel",
+        "Cross-Platform Mobile Development: Designed and deployed mobile applications to the Google Play Store using Flutter, managing the full lifecycle from UI implementation to production release",
+        "API Architecture & Integration: Developed scalable RESTful APIs and integrated complex spatial data to support real-time geolocation features and seamless front-end-to-back-end communication",
+        "Database & System Optimization: Managed MySQL databases and server configurations via cPanel, ensuring high availability, data integrity, and optimized query performance",
+        "End-to-End Project Execution: Collaborated in Agile environments using Trello and GitHub while utilizing Canva for rapid UI prototyping and visual asset creation",
+      ],
+      tags: [
+        "Laravel",
+        "Flutter",
+        "Golang",
+        "Python",
+        "REST APIs",
+        "MySQL",
+        "jQuery",
+        "JavaScript",
+        "Google Play Console",
+        "cPanel",
+        "Canva",
+        "Trello",
+        "GitHub",
+        "Node.js",
+      ],
     },
   },
   {
     id: "office3",
+    zone: "work_zone",
     kind: "office",
     name: "PT. Adidata Informatika",
     shortLabel: "Office 3",
     signLines: ["PT. Adidata Informatika", "★ Saat ini"],
-    x: 190,
-    y: ROW2_BASE,
+    x: 780,
+    y: ROW_BASE,
     visual: {
       style: "office",
       width: 110,
@@ -474,9 +618,35 @@ export const buildings: BuildingData[] = [
     modal: {
       title: "Pengalaman Kerja — Contract",
       subtitle: "Fullstack Developer — Sept. 2025 s.d Saat ini",
-      paragraphs: ["Masuk ke dunia IT consultant, yang mana beda project bisa beda bahasa pemograman.. ketemu rekan kerjaa yang seru poll dan baik walau beberapa udah beda perusahaan."],
-      bullets: ["Fullstack Web Development: Developing enterprise web applications for PT SMI, including IOSS, ECMS (Laravel REST API & Livewire), and SMI Berbagi (React TypeScript & Laravel), focusing on automated workflows, business logic, and responsive UI", "Performance & Scaling: Optimizing system performance using Redis for caching and Apache Kafka for robust event-driven messaging across microservices", "Infrastructure & DevOps: Managing containerized environments with Docker and utilizing advanced Queue management to ensure high-speed data synchronization", "Agile Collaboration: Maintaining technical stability, shipping bug fixes, and driving disciplined SDLC execution across client deliverables using Git and Jira"],
-      tags: ["AWS", "Jira", "Microsoft Azure", "Docker", "Agile", "Cursor AI", "Claude", "Vibe Coder", "Laravel", "Livewire", "React TS", "Redis", "Gitlab", "Microservices", "REST APIs", "SQL Server", "MySQL", "Apache Kafka"],
+      paragraphs: [
+        "Masuk ke dunia IT consultant, yang mana beda project bisa beda bahasa pemograman.. ketemu rekan kerjaa yang seru poll dan baik walau beberapa udah beda perusahaan.",
+      ],
+      bullets: [
+        "Fullstack Web Development: Developing enterprise web applications for PT SMI, including IOSS, ECMS (Laravel REST API & Livewire), and SMI Berbagi (React TypeScript & Laravel), focusing on automated workflows, business logic, and responsive UI",
+        "Performance & Scaling: Optimizing system performance using Redis for caching and Apache Kafka for robust event-driven messaging across microservices",
+        "Infrastructure & DevOps: Managing containerized environments with Docker and utilizing advanced Queue management to ensure high-speed data synchronization",
+        "Agile Collaboration: Maintaining technical stability, shipping bug fixes, and driving disciplined SDLC execution across client deliverables using Git and Jira",
+      ],
+      tags: [
+        "AWS",
+        "Jira",
+        "Microsoft Azure",
+        "Docker",
+        "Agile",
+        "Cursor AI",
+        "Claude",
+        "Vibe Coder",
+        "Laravel",
+        "Livewire",
+        "React TS",
+        "Redis",
+        "Gitlab",
+        "Microservices",
+        "REST APIs",
+        "SQL Server",
+        "MySQL",
+        "Apache Kafka",
+      ],
     },
   },
 ];
@@ -527,7 +697,6 @@ const npcNames: Record<string, [string, string]> = {
   office3: ["Farhan", "Mira"],
 };
 
-/** The coffee seller stands behind the counter (drawn by the stand itself) plus one customer */
 const COFFEE_CUSTOMER: CharacterLook = {
   skin: "#f6cfa8",
   hair: "#3b2618",
@@ -544,6 +713,7 @@ export const npcs: NpcData[] = buildings
       return [
         {
           id: "coffee-customer",
+          zone: b.zone,
           buildingId: b.id,
           name: "Pelanggan",
           gender: "female",
@@ -556,11 +726,11 @@ export const npcs: NpcData[] = buildings
     }
     const [mName, fName] = npcNames[b.id];
     const [mLook, fLook] = npcLooks[b.id];
-    // Stand beside the front corners so the name sign stays readable
     const offset = b.visual.width / 2 + 14;
     return [
       {
         id: `${b.id}-m`,
+        zone: b.zone,
         buildingId: b.id,
         name: mName,
         gender: "male" as const,
@@ -571,6 +741,7 @@ export const npcs: NpcData[] = buildings
       },
       {
         id: `${b.id}-f`,
+        zone: b.zone,
         buildingId: b.id,
         name: fName,
         gender: "female" as const,
@@ -583,45 +754,80 @@ export const npcs: NpcData[] = buildings
   });
 
 export const decor: DecorItem[] = [
-  // Top strip, tucked between building backs
-  { id: "t1", kind: "tree", x: 236, y: 120 },
-  { id: "t2", kind: "pine", x: 425, y: 110 },
-  { id: "t3", kind: "tree", x: 615, y: 118 },
-  { id: "t4", kind: "pine", x: 805, y: 110 },
-  { id: "t5", kind: "tree", x: 1180, y: 150 },
-  { id: "t6", kind: "pine", x: 45, y: 120 },
-  { id: "t15", kind: "pine", x: 1300, y: 120 },
-  // Left & right edges
-  { id: "t7", kind: "pine", x: 45, y: 480 },
-  // Bottom strip, below the second street
-  { id: "t9", kind: "tree", x: 90, y: 745 },
-  { id: "t10", kind: "pine", x: 290, y: 750 },
-  { id: "t11", kind: "tree", x: 470, y: 748 },
-  { id: "t12", kind: "pine", x: 640, y: 752 },
-  { id: "t13", kind: "tree", x: 1000, y: 748 },
-  { id: "t14", kind: "pine", x: 1180, y: 750 },
-  { id: "t16", kind: "tree", x: 1310, y: 748 },
-  { id: "b1", kind: "bush", x: 60, y: 300 },
-  { id: "b2", kind: "bush", x: 1330, y: 640 },
-  { id: "b3", kind: "bush", x: 745, y: 470 },
-  { id: "b4", kind: "bush", x: 60, y: 600 },
-  { id: "b5", kind: "bush", x: 1330, y: 520 },
-  { id: "f1", kind: "flowers", x: 236, y: 290 },
-  { id: "f2", kind: "flowers", x: 805, y: 292 },
-  { id: "f3", kind: "flowers", x: 745, y: 520 },
-  { id: "f4", kind: "flowers", x: 380, y: 712 },
-  { id: "f5", kind: "flowers", x: 880, y: 714 },
-  { id: "f6", kind: "flowers", x: 1160, y: 296 },
-  { id: "r1", kind: "rock", x: 560, y: 716 },
-  { id: "r2", kind: "rock", x: 820, y: 750 },
-  // Street lamps along both streets
-  { id: "l1", kind: "lamp", x: 425, y: 308 },
-  { id: "l2", kind: "lamp", x: 615, y: 308 },
-  { id: "l3", kind: "lamp", x: 1220, y: 308 },
-  { id: "l4", kind: "lamp", x: 1325, y: 420 },
-  { id: "l5", kind: "lamp", x: 200, y: 684 },
-  { id: "l6", kind: "lamp", x: 940, y: 684 },
+  // ==================== HOME ZONE DECOR ====================
+  { id: "h_t1", zone: "home_zone", kind: "pine", x: 65, y: 120 },
+  { id: "h_t2", zone: "home_zone", kind: "tree", x: 300, y: 115 },
+  { id: "h_t3", zone: "home_zone", kind: "pine", x: 460, y: 110 },
+  { id: "h_t4", zone: "home_zone", kind: "tree", x: 640, y: 115 },
+  { id: "h_t5", zone: "home_zone", kind: "pine", x: 885, y: 120 },
+  { id: "h_t6", zone: "home_zone", kind: "tree", x: 140, y: 485 },
+  { id: "h_t7", zone: "home_zone", kind: "pine", x: 380, y: 490 },
+  { id: "h_t8", zone: "home_zone", kind: "tree", x: 650, y: 485 },
+  { id: "h_t9", zone: "home_zone", kind: "pine", x: 860, y: 490 },
+  { id: "h_b1", zone: "home_zone", kind: "bush", x: 85, y: 290 },
+  { id: "h_b2", zone: "home_zone", kind: "bush", x: 260, y: 440 },
+  { id: "h_b3", zone: "home_zone", kind: "bush", x: 520, y: 445 },
+  { id: "h_f1", zone: "home_zone", kind: "flowers", x: 270, y: 295 },
+  { id: "h_f2", zone: "home_zone", kind: "flowers", x: 625, y: 295 },
+  { id: "h_f3", zone: "home_zone", kind: "flowers", x: 460, y: 435 },
+  { id: "h_l1", zone: "home_zone", kind: "lamp", x: 280, y: 315 },
+  { id: "h_l2", zone: "home_zone", kind: "lamp", x: 465, y: 315 },
+  { id: "h_l3", zone: "home_zone", kind: "lamp", x: 635, y: 315 },
+  { id: "h_l4", zone: "home_zone", kind: "lamp", x: 845, y: 315 },
+
+  // ==================== EDU ZONE DECOR ====================
+  { id: "e_t1", zone: "edu_zone", kind: "tree", x: 80, y: 115 },
+  { id: "e_t2", zone: "edu_zone", kind: "pine", x: 290, y: 110 },
+  { id: "e_t3", zone: "edu_zone", kind: "tree", x: 490, y: 115 },
+  { id: "e_t4", zone: "edu_zone", kind: "pine", x: 695, y: 110 },
+  { id: "e_t5", zone: "edu_zone", kind: "tree", x: 915, y: 115 },
+  { id: "e_t6", zone: "edu_zone", kind: "pine", x: 1150, y: 115 },
+  { id: "e_t7", zone: "edu_zone", kind: "pine", x: 110, y: 490 },
+  { id: "e_t8", zone: "edu_zone", kind: "tree", x: 350, y: 485 },
+  { id: "e_t9", zone: "edu_zone", kind: "pine", x: 590, y: 490 },
+  { id: "e_t10", zone: "edu_zone", kind: "tree", x: 830, y: 485 },
+  { id: "e_t11", zone: "edu_zone", kind: "pine", x: 1080, y: 490 },
+  { id: "e_f1", zone: "edu_zone", kind: "flowers", x: 290, y: 295 },
+  { id: "e_f2", zone: "edu_zone", kind: "flowers", x: 490, y: 295 },
+  { id: "e_f3", zone: "edu_zone", kind: "flowers", x: 700, y: 295 },
+  { id: "e_f4", zone: "edu_zone", kind: "flowers", x: 470, y: 435 },
+  { id: "e_f5", zone: "edu_zone", kind: "flowers", x: 720, y: 435 },
+  { id: "e_b1", zone: "edu_zone", kind: "bush", x: 940, y: 440 },
+  { id: "e_l1", zone: "edu_zone", kind: "lamp", x: 290, y: 315 },
+  { id: "e_l2", zone: "edu_zone", kind: "lamp", x: 490, y: 315 },
+  { id: "e_l3", zone: "edu_zone", kind: "lamp", x: 695, y: 315 },
+  { id: "e_l4", zone: "edu_zone", kind: "lamp", x: 915, y: 315 },
+
+  // ==================== WORK ZONE DECOR ====================
+  { id: "w_t1", zone: "work_zone", kind: "pine", x: 95, y: 115 },
+  { id: "w_t2", zone: "work_zone", kind: "tree", x: 390, y: 115 },
+  { id: "w_t3", zone: "work_zone", kind: "pine", x: 650, y: 110 },
+  { id: "w_t4", zone: "work_zone", kind: "tree", x: 925, y: 120 },
+  { id: "w_t5", zone: "work_zone", kind: "pine", x: 100, y: 500 },
+  { id: "w_t6", zone: "work_zone", kind: "tree", x: 370, y: 495 },
+  { id: "w_t7", zone: "work_zone", kind: "pine", x: 780, y: 495 },
+  { id: "w_t8", zone: "work_zone", kind: "tree", x: 930, y: 490 },
+  { id: "w_f1", zone: "work_zone", kind: "flowers", x: 390, y: 295 },
+  { id: "w_f2", zone: "work_zone", kind: "flowers", x: 650, y: 295 },
+  { id: "w_f3", zone: "work_zone", kind: "flowers", x: 450, y: 445 },
+  { id: "w_r1", zone: "work_zone", kind: "rock", x: 700, y: 465 },
+  { id: "w_l1", zone: "work_zone", kind: "lamp", x: 150, y: 315 },
+  { id: "w_l2", zone: "work_zone", kind: "lamp", x: 390, y: 315 },
+  { id: "w_l3", zone: "work_zone", kind: "lamp", x: 650, y: 315 },
+  { id: "w_l4", zone: "work_zone", kind: "lamp", x: 900, y: 315 },
 ];
+
+export function getZoneBuildings(zone: TownZone): BuildingData[] {
+  return buildings.filter((b) => b.zone === zone);
+}
+
+export function getZoneNpcs(zone: TownZone): NpcData[] {
+  return npcs.filter((n) => n.zone === zone);
+}
+
+export function getZoneDecor(zone: TownZone): DecorItem[] {
+  return decor.filter((d) => d.zone === zone);
+}
 
 /** Screen-space-independent bounds of a building sprite (for clicks / culling) */
 export function getBuildingBounds(b: BuildingData) {
@@ -636,50 +842,72 @@ export function getBuildingBounds(b: BuildingData) {
   };
 }
 
-/** Ground footprint the player cannot walk into */
-function insideBuildingFootprint(x: number, y: number): boolean {
-  for (const b of buildings) {
-    const v = b.visual;
-    const dx = v.depth * OBLIQUE.x;
-    const dy = v.depth * OBLIQUE.y;
-    const left = b.x - v.width / 2 - 6;
-    const right = b.x + v.width / 2 + dx * 0.7;
-    const top = b.y - dy;
-    const bottom = b.y + 4;
-    if (x > left && x < right && y > top && y < bottom) return true;
-  }
-  return false;
-}
-
-function inWater(x: number, y: number): boolean {
-  const nx = (x - pond.x) / (pond.rx + 4);
-  const ny = (y - pond.y) / (pond.ry + 4);
-  if (nx * nx + ny * ny >= 1) return false;
-  const onBridge =
-    Math.abs(x - bridge.x) <= bridge.width / 2 &&
-    Math.abs(y - bridge.y) <= bridge.walkHalfHeight;
-  return !onBridge;
-}
-
-export function isBlocked(x: number, y: number): boolean {
-  if (x < 20 || y < 30 || x > WORLD_WIDTH - 20 || y > WORLD_HEIGHT - 10) return true;
-  return insideBuildingFootprint(x, y) || inWater(x, y);
-}
-
-export function findNearestBuilding(
-  playerX: number,
-  playerY: number,
-  maxDistance = INTERACT_DISTANCE,
-): BuildingData | null {
-  let best: BuildingData | null = null;
-  let bestDist = maxDistance;
-  for (const b of buildings) {
-    const dist = Math.hypot(playerX - b.x, playerY - (b.y + 14));
-    const limit = Math.max(maxDistance, b.visual.width * 0.75);
-    if (dist < limit && dist < bestDist) {
-      best = b;
-      bestDist = dist;
+  function insideBuildingFootprint(zone: TownZone, x: number, y: number): boolean {
+    for (const b of buildings) {
+      if (b.zone !== zone) continue;
+      const v = b.visual;
+      const dx = v.depth * OBLIQUE.x;
+      const dy = v.depth * OBLIQUE.y;
+      const left = b.x - v.width / 2 - 6;
+      const right = b.x + v.width / 2 + dx * 0.7;
+      const top = b.y - dy;
+      const bottom = b.y + 4;
+      if (x > left && x < right && y > top && y < bottom) return true;
     }
+    return false;
   }
-  return best;
-}
+
+    function inWater(zone: TownZone, x: number, y: number): boolean {
+      const pond = TOWN_ZONES[zone].pond;
+      if (!pond) return false;
+      const nx = (x - pond.x) / (pond.rx + 4);
+      const ny = (y - pond.y) / (pond.ry + 4);
+      return nx * nx + ny * ny < 1;
+    }
+
+      export function isBlockedInZone(zone: TownZone, x: number, y: number): boolean {
+        const cfg = TOWN_ZONES[zone];
+        if (x < 22 || y < 32 || x > cfg.width - 22 || y > cfg.height - 14) return true;
+        return insideBuildingFootprint(zone, x, y) || inWater(zone, x, y);
+      }
+
+        export function findNearestBuildingInZone(
+          zone: TownZone,
+          playerX: number,
+          playerY: number,
+          maxDistance = INTERACT_DISTANCE,
+        ): BuildingData | null {
+        let best: BuildingData | null = null;
+        let bestDist = maxDistance;
+        for (const b of buildings) {
+          if (b.zone !== zone) continue;
+          const dist = Math.hypot(playerX - b.x, playerY - (b.y + 14));
+          const limit = Math.max(maxDistance, b.visual.width * 0.75);
+          if (dist < limit && dist < bestDist) {
+            best = b;
+            bestDist = dist;
+          }
+        }
+        return best;
+      }
+
+      export function findNearestGate(
+        zone: TownZone,
+        playerX: number,
+        playerY: number,
+        maxDist = 68,
+      ): GateConfig | null {
+        const cfg = TOWN_ZONES[zone];
+        const gates = [cfg.leftGate, cfg.rightGate].filter((g): g is GateConfig => !!g);
+        for (const g of gates) {
+          if (Math.hypot(playerX - g.x, playerY - g.y) <= maxDist) {
+            return g;
+          }
+        }
+        return null;
+      }
+
+      export function isNearParking(zone: TownZone, playerX: number, playerY: number): boolean {
+        const p = TOWN_ZONES[zone].parkingSpot;
+        return Math.hypot(playerX - p.x, playerY - p.y) <= 64;
+      }
