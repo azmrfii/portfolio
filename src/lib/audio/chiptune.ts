@@ -104,6 +104,7 @@ class ChiptuneManager {
   private step = 0;
   private timer: number | null = null;
   private lastStepSfx = 0;
+  private listeners = new Set<() => void>();
 
   constructor() {
     if (typeof window !== "undefined") {
@@ -114,6 +115,21 @@ class ChiptuneManager {
       }
     }
   }
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+
+  getSnapshot = (): boolean => {
+    return this.muted;
+  };
+
+  getServerSnapshot = (): boolean => {
+    return false;
+  };
 
   isMuted(): boolean {
     return this.muted;
@@ -157,6 +173,7 @@ class ChiptuneManager {
     if (this.ctx && this.masterGain) {
       this.masterGain.gain.setTargetAtTime(mute ? 0 : 0.22, this.ctx.currentTime, 0.04);
     }
+    this.listeners.forEach((l) => l());
     return this.muted;
   }
 

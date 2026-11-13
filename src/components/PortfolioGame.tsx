@@ -7,7 +7,7 @@ import {
   type VehicleType,
 } from "@/data/worldData";
 import { sound } from "@/lib/audio/chiptune";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import BuildingModal from "./BuildingModal";
 import GameCanvas, { type GameCanvasHandle } from "./GameCanvas";
 import Hud from "./Hud";
@@ -25,7 +25,11 @@ export default function PortfolioGame() {
   const [activeDialog, setActiveDialog] = useState<RpgDialogData | null>(null);
   const [dialogKey, setDialogKey] = useState(0);
   const dialogRef = useRef<RpgDialogData | null>(null);
-  const [muted, setMuted] = useState(() => sound.isMuted());
+  const muted = useSyncExternalStore(
+    sound.subscribe,
+    sound.getSnapshot,
+    sound.getServerSnapshot,
+  );
 
   const openDialog = useCallback((dialog: RpgDialogData) => {
     dialogRef.current = dialog;
@@ -61,8 +65,7 @@ export default function PortfolioGame() {
   }, [closeModal]);
 
   const handleToggleMute = useCallback(() => {
-    const next = sound.toggleMute();
-    setMuted(next);
+    sound.toggleMute();
   }, []);
 
   const handleSelectVehicle = useCallback((v: VehicleType) => {
