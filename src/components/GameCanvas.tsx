@@ -64,6 +64,7 @@ import {
   drawDecor,
   drawDeskChairBack,
   drawDrivingScene,
+  drivingLayout,
   drawFurnitureItem,
   drawHouseGround,
   drawNpc,
@@ -158,15 +159,19 @@ const GAME_KEYS = new Set([
 ]);
 
 function createHighwayTraffic(totalDistance: number): HighwayTrafficItem[] {
-  const colors = ["#3b82f6", "#10b981", "#f59e0b", "#a855f7", "#ec4899"];
+  const colors = ["#3b82f6", "#10b981", "#f59e0b", "#a855f7", "#ec4899", "#0ea5e9"];
+  const kinds: HighwayTrafficItem["kind"][] = ["sedan", "van", "sedan", "truck", "sedan", "van"];
+  const lanes: (0 | 1 | 2)[] = [1, 0, 2, 1, 0, 2];
+  const count = 6;
   const items: HighwayTrafficItem[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < count; i++) {
     items.push({
       id: i,
-      x: 340 + i * ((totalDistance - 450) / 4),
-      lane: ((i * 2 + 1) % 3) as 0 | 1 | 2,
+      x: 420 + i * ((totalDistance - 700) / count),
+      lane: lanes[i],
       color: colors[i % colors.length],
-      speed: 145 + (i % 2) * 30,
+      kind: kinds[i],
+      speed: kinds[i] === "truck" ? 120 : 140 + (i % 3) * 18,
     });
   }
   return items;
@@ -229,7 +234,13 @@ export default function GameCanvas({
   const vehicleRef = useRef<VehicleType>(vehicle);
   const drivingRef = useRef<DrivingRuntimeState | null>(null);
   const lastInteriorRef = useRef<"house" | "agl">("house");
-  const fadeRef = useRef<{ alpha: number; dir: -1 | 0 | 1; onMid?: () => void }>({
+  const fadeRef = useRef<{
+    alpha: number;
+    dir: -1 | 0 | 1;
+    /** "iris" closes a circle around the player/vehicle instead of a flat fade */
+    style?: "fade" | "iris";
+    onMid?: () => void;
+  }>({
     alpha: 0,
     dir: 0,
   });
@@ -348,6 +359,7 @@ export default function GameCanvas({
       fadeRef.current = {
         alpha: 0,
         dir: 1,
+        style: "iris",
         onMid: () => {
           drivingRef.current = {
             fromZone,
@@ -358,10 +370,15 @@ export default function GameCanvas({
             distance: 0,
             totalDistance,
             laneY: 0,
-            speed: mode === "auto" ? 430 : 290,
+            laneVel: 0,
+            // Starts from rest and pulls away smoothly
+            speed: 0,
+            braking: false,
             boosting: 0,
-            honkTimer: 450,
+            honkTimer: 0,
             scrollX: 0,
+            screenShift: 0,
+            arrivedFor: null,
             traffic: createHighwayTraffic(totalDistance),
             boostPads: createBoostPads(totalDistance),
           };
@@ -384,6 +401,7 @@ export default function GameCanvas({
     fadeRef.current = {
       alpha: 0,
       dir: 1,
+      style: "iris",
       onMid: () => {
         drivingRef.current = null;
         zoneRef.current = destZone;
@@ -1133,16 +1151,20 @@ export default function GameCanvas({
 
       // Scene fade transition update
       const fade = fadeRef.current;
+      const fadeRate = fade.style === "iris" ? 0.0024 : 0.0045;
       if (fade.dir === 1) {
-        fade.alpha = Math.min(1, fade.alpha + dt * 0.0045);
+        fade.alpha = Math.min(1, fade.alpha + dt * fadeRate);
         if (fade.alpha >= 1) {
           fade.onMid?.();
           fade.onMid = undefined;
           fade.dir = -1;
         }
       } else if (fade.dir === -1) {
-        fade.alpha = Math.max(0, fade.alpha - dt * 0.0045);
-        if (fade.alpha <= 0) fade.dir = 0;
+        fade.alpha = Math.max(0, fade.alpha - dt * fadeRate);
+        if (fade.alpha <= 0) {
+          fade.dir = 0;
+          fade.style = undefined;
+        }
       }
 
       // ==================== DRIVING SCENE UPDATE & RENDER ====================
@@ -1150,8 +1172,14 @@ export default function GameCanvas({
         const d = drivingRef.current;
         if (d.boosting > 0) d.boosting = Math.max(0, d.boosting - dt);
         if (d.honkTimer > 0) d.honkTimer = Math.max(0, d.honkTimer - dt);
+        // Frame-rate independent smoothing factor for a time constant in ms
+        const ease = (tau: number) => 1 - Math.exp(-dt / tau);
 
-        if (fade.dir === 0) {
+        // Traffic keeps cruising even during the iris transition
+        for (const t of d.traffic) t.x += (t.speed * dt) / 1000;
+
+        // Start pulling away while the iris is still opening
+        if (fade.dir !== 1 && d.arrivedFor === null) {
           let steerY = 0;
           if (input.up || virt.up) steerY -= 1;
           if (input.down || virt.down) steerY += 1;
@@ -1163,43 +1191,61 @@ export default function GameCanvas({
             (d.direction === 1 && (input.left || virt.left)) ||
             (d.direction === -1 && (input.right || virt.right));
 
-          // Auto mode gently steers around traffic if user isn't pressing up/down
-          if (d.mode === "auto" && steerY === 0) {
-            const ahead = d.traffic.find(
-              (t) => t.x > d.distance && t.x - d.distance < 210 && Math.abs((t.lane - 1) * 0.65 - d.laneY) < 0.36,
+          const blockedLane = (lane: number, ahead: number, behind: number) =>
+            d.traffic.some(
+              (t) => t.lane - 1 === lane && t.x - d.distance < ahead && t.x - d.distance > -behind,
             );
-            if (ahead) {
-              const targetLaneY = ahead.lane === 1 ? -0.65 : 0;
-              steerY = targetLaneY < d.laneY ? -1 : 1;
+
+          if (steerY === 0) {
+            const current = Math.round(d.laneY);
+            let targetLane = current;
+            if (d.mode === "auto" && blockedLane(current, 260, 0)) {
+              // Overtake through whichever neighbouring lane is clear
+              const options = [current - 1, current + 1].filter((l) => l >= -1 && l <= 1);
+              targetLane = options.find((l) => !blockedLane(l, 200, 70)) ?? current;
             }
+            // Lane assist: glide to the lane center instead of stopping between lanes
+            steerY = Math.max(-1, Math.min(1, (targetLane - d.laneY) * 2.4));
           }
 
-          d.laneY = Math.max(-0.82, Math.min(0.82, d.laneY + steerY * (dt * 0.0022)));
+          // Steering has inertia: lateral velocity eases toward the input
+          d.laneVel += (steerY * 2.1 - d.laneVel) * ease(110);
+          d.laneY += (d.laneVel * dt) / 1000;
+          if (Math.abs(d.laneY) > 1.12) {
+            d.laneY = Math.sign(d.laneY) * 1.12;
+            d.laneVel = 0;
+          }
 
-          const baseTarget = d.mode === "auto" ? 430 : wantFast ? 420 : wantSlow ? 185 : 285;
-          const targetSpeed = baseTarget + (d.boosting > 0 ? 185 : 0);
-          d.speed += (targetSpeed - d.speed) * 0.12;
+          const cruise = d.mode === "auto" ? 420 : wantFast ? 430 : wantSlow ? 180 : 290;
+          let targetSpeed = cruise + (d.boosting > 0 ? 190 : 0);
 
-          // Update traffic & check boost pads
+          // Follow slower traffic softly instead of snapping the speed down
           for (const t of d.traffic) {
-            t.x += (t.speed * dt) / 1000;
-            const laneNorm = (t.lane - 1) * 0.65;
-            if (Math.abs(t.x - d.distance) < 48 && Math.abs(laneNorm - d.laneY) < 0.3) {
-              // Gentle bump / slow down behind traffic
-              d.speed = Math.min(d.speed, t.speed + 20);
-              if (d.honkTimer <= 0) {
-                d.honkTimer = 420;
-                sound.playHorn(d.vehicle === "moto");
-              }
+            const gap = t.x - d.distance;
+            const sameLane = Math.abs(t.lane - 1 - d.laneY) < 0.6;
+            if (!sameLane || gap < 0 || gap > 170) continue;
+            targetSpeed = Math.min(targetSpeed, Math.max(t.speed * 0.85, t.speed + (gap - 70) * 2.6));
+            if (gap < 120 && !t.honked) {
+              t.honked = true;
+              d.honkTimer = 600;
+              sound.playHorn(d.vehicle === "moto");
             }
+            if (gap < 58) d.distance = t.x - 58;
           }
+
+          // Brake smoothly into the destination
+          const remaining = d.totalDistance - d.distance;
+          targetSpeed = Math.min(targetSpeed, 18 + Math.sqrt(2 * 330 * Math.max(0, remaining)));
+
+          const accelerating = targetSpeed > d.speed;
+          d.braking = !accelerating && d.speed - targetSpeed > 12;
+          d.speed += (targetSpeed - d.speed) * ease(accelerating ? 520 : 260);
 
           for (const pad of d.boostPads) {
-            const laneNorm = (pad.lane - 1) * 0.65;
             if (
               !pad.collected &&
               Math.abs(pad.x - d.distance) < 42 &&
-              Math.abs(laneNorm - d.laneY) < 0.36
+              Math.abs(pad.lane - 1 - d.laneY) < 0.55
             ) {
               pad.collected = true;
               d.boosting = 950;
@@ -1222,18 +1268,31 @@ export default function GameCanvas({
           d.distance = Math.min(d.totalDistance, d.distance + stepDist);
           d.scrollX += stepDist;
 
-          if (d.distance >= d.totalDistance) {
+          const left = d.totalDistance - d.distance;
+          if (left < 0.5 || (left < 6 && d.speed < 30)) {
+            d.arrivedFor = 0;
+            d.braking = true;
+          }
+        } else if (d.arrivedFor !== null) {
+          // Roll to a stop, hold for a beat, then close the iris
+          d.speed += (0 - d.speed) * ease(120);
+          d.laneVel += (0 - d.laneVel) * ease(120);
+          d.arrivedFor += dt;
+          if (d.arrivedFor > 650) {
+            d.braking = false;
             finishDriving();
           }
         }
 
+        // The vehicle drifts back on screen when fast and forward when slowing
+        const shiftTarget = -(d.speed - 290) * 0.14;
+        d.screenShift += (shiftTarget - d.screenShift) * ease(700);
+
         ctx.clearRect(0, 0, viewW, viewH);
         drawDrivingScene(ctx, viewW, viewH, d, now);
 
-        if (fade.alpha > 0.01) {
-          ctx.fillStyle = `rgba(18, 12, 8, ${fade.alpha})`;
-          ctx.fillRect(0, 0, viewW, viewH);
-        }
+        const lay = drivingLayout(viewW, viewH, d);
+        drawTransition(ctx, fade, viewW, viewH, lay.playerX, lay.playerY - 10);
 
         raf = requestAnimationFrame(tick);
         return;
@@ -1848,10 +1907,14 @@ export default function GameCanvas({
         }
       }
 
-      if (fade.alpha > 0.01) {
-        ctx.fillStyle = `rgba(18, 12, 8, ${fade.alpha})`;
-        ctx.fillRect(0, 0, viewW, viewH);
-      }
+      drawTransition(
+        ctx,
+        fade,
+        viewW,
+        viewH,
+        player.x - cameraRef.current.x,
+        player.y - cameraRef.current.y - 24,
+      );
 
       raf = requestAnimationFrame(tick);
     };
@@ -1881,6 +1944,43 @@ function cameraTarget(pos: number, view: number, world: number): number {
 function facingFromDir(dx: number, dy: number): Facing {
   if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? "left" : "right";
   return dy < 0 ? "up" : "down";
+}
+
+/** Scene transition overlay: a flat fade, or an iris that closes around (cx, cy) */
+function drawTransition(
+  ctx: CanvasRenderingContext2D,
+  fade: { alpha: number; style?: "fade" | "iris" },
+  viewW: number,
+  viewH: number,
+  cx: number,
+  cy: number,
+): void {
+  if (fade.alpha <= 0.01) return;
+  if (fade.style !== "iris") {
+    ctx.fillStyle = `rgba(18, 12, 8, ${fade.alpha})`;
+    ctx.fillRect(0, 0, viewW, viewH);
+    return;
+  }
+  const t = fade.alpha * fade.alpha * (3 - 2 * fade.alpha);
+  const maxR = Math.hypot(Math.max(cx, viewW - cx), Math.max(cy, viewH - cy)) + 20;
+  const r = maxR * (1 - t);
+  ctx.save();
+  ctx.fillStyle = "#120c08";
+  ctx.beginPath();
+  ctx.rect(0, 0, viewW, viewH);
+  if (r > 0.5) ctx.arc(cx, cy, r, 0, Math.PI * 2, true);
+  ctx.fill("evenodd");
+  if (r > 0.5) {
+    // Soft warm rim on the iris edge
+    const rim = ctx.createRadialGradient(cx, cy, Math.max(0, r - 26), cx, cy, r);
+    rim.addColorStop(0, "rgba(18, 12, 8, 0)");
+    rim.addColorStop(1, "rgba(18, 12, 8, 0.55)");
+    ctx.fillStyle = rim;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawHint(ctx: CanvasRenderingContext2D, x: number, y: number, text: string): void {
