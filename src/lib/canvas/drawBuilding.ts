@@ -1,4 +1,5 @@
-import { OBLIQUE, type BuildingData, type BuildingVisual } from "@/data/worldData";
+import { OBLIQUE, type BuildingData, type BuildingVisual, type CharacterLook } from "@/data/worldData";
+import { drawCharacter } from "./drawCharacter";
 import { drawFloatingIcon } from "./drawWorld";
 import { OUTLINE, fillStroke, polygonPath, roundRectPath, shade } from "./shapes";
 import type { WorldRenderContext } from "./types";
@@ -69,6 +70,13 @@ export function drawBuilding(w: WorldRenderContext, b: BuildingData, highlight =
     ctx.setLineDash([]);
   }
 
+  // The coffee kiosk is an open stall, not a walled box
+  if (v.style === "coffee") {
+    drawCoffeeStand(ctx, g, v, time);
+    drawSign(ctx, sx, base + 8, b.shortLabel, b.signLines);
+    return;
+  }
+
   // Walls
   polygonPath(ctx, [
     [g.R, base],
@@ -106,6 +114,9 @@ export function drawBuilding(w: WorldRenderContext, b: BuildingData, highlight =
     case "office":
       drawOffice(ctx, g, v, b.shortLabel);
       break;
+    case "disco":
+      drawDisco(ctx, g, v, time);
+      break;
   }
 
   // Place the sign to the left of the house door so the player doesn't cover it; centered for others
@@ -118,6 +129,277 @@ export function drawBuilding(w: WorldRenderContext, b: BuildingData, highlight =
 }
 
 /* ---------- styles ---------- */
+
+const BARISTA: CharacterLook = {
+  skin: "#e8b48a",
+  hair: "#1f1a17",
+  hairStyle: "short",
+  shirt: "#f8fafc",
+  pants: "#3b2a1a",
+  shoes: "#1f1a17",
+};
+
+/** Open street kiosk: back shelf, barista, counter, striped awning */
+function drawCoffeeStand(ctx: CanvasRenderingContext2D, g: Geo, v: BuildingVisual, time: number): void {
+  const counterH = g.H;
+  const awningY = g.base - counterH - 50;
+  const backX = g.L + g.dx;
+  const backBase = g.base - g.dy;
+
+  // Back shelf wall with a menu board
+  ctx.beginPath();
+  ctx.rect(backX, awningY + 6, g.W, backBase - awningY - 6 - counterH + 8);
+  fillStroke(ctx, shade(v.wallColor, -20), 1.4);
+  roundRectPath(ctx, backX + 8, awningY + 12, 30, 20, 2);
+  fillStroke(ctx, "#1f2937", 1.2);
+  ctx.fillStyle = "#fef3c7";
+  ctx.font = "700 5px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("MENU", backX + 11, awningY + 14);
+  ctx.fillRect(backX + 11, awningY + 21, 18, 1.2);
+  ctx.fillRect(backX + 11, awningY + 25, 22, 1.2);
+  ctx.fillRect(backX + 11, awningY + 29, 14, 1.2);
+  // Jars on the shelf
+  for (let i = 0; i < 3; i++) {
+    const jx = backX + 46 + i * 9;
+    roundRectPath(ctx, jx, awningY + 20, 6, 10, 1.5);
+    fillStroke(ctx, ["#78350f", "#a16207", "#d6a77a"][i], 1);
+  }
+
+  // Barista behind the counter
+  drawCharacter(ctx, g.sx + 6, g.base - 12, BARISTA, {
+    facing: "down",
+    moving: false,
+    walkTime: 0,
+    waving: false,
+    waveTime: 0,
+    time,
+    seed: 3,
+  }, 0.95);
+
+  // Back posts
+  ctx.fillStyle = "#5c3a1b";
+  ctx.fillRect(backX + 1, awningY + 4, 3, backBase - awningY - counterH);
+  ctx.fillRect(backX + g.W - 4, awningY + 4, 3, backBase - awningY - counterH);
+
+  // Counter (oblique box)
+  box(ctx, g.L, g.base, g.W, counterH, g.D, v.wallColor);
+  // Plank lines on the counter front
+  ctx.strokeStyle = shade(v.wallColor, -30);
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 3; i++) {
+    const y = g.base - (counterH * i) / 3;
+    ctx.beginPath();
+    ctx.moveTo(g.L + 1, y);
+    ctx.lineTo(g.R - 1, y);
+    ctx.stroke();
+  }
+  // Cup logo on the counter front
+  ctx.beginPath();
+  ctx.arc(g.sx, g.base - counterH / 2, 8, 0, Math.PI * 2);
+  fillStroke(ctx, "#fef3c7", 1.2);
+  roundRectPath(ctx, g.sx - 4, g.base - counterH / 2 - 3, 7, 7, 1.5);
+  fillStroke(ctx, "#78350f", 1);
+
+  // Espresso machine + cups on the counter top
+  const topY = g.base - counterH;
+  box(ctx, g.L + 8 + g.dx * 0.4, topY - g.dy * 0.4, 18, 14, 10, "#9ca3af");
+  ctx.fillStyle = "#ef4444";
+  ctx.fillRect(g.L + 12 + g.dx * 0.4, topY - g.dy * 0.4 - 11, 3, 3);
+  for (let i = 0; i < 3; i++) {
+    const cx = g.R - 30 + i * 9 + g.dx * 0.35;
+    const cy = topY - g.dy * 0.35;
+    roundRectPath(ctx, cx - 3, cy - 8, 6, 8, 1.5);
+    fillStroke(ctx, i === 1 ? "#fef3c7" : "#ffffff", 1);
+    // Rising steam
+    const t = (time * 0.0012 + i * 0.33) % 1;
+    ctx.strokeStyle = `rgba(255,255,255,${0.7 * (1 - t)})`;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 9 - t * 4);
+    ctx.quadraticCurveTo(cx + 3, cy - 13 - t * 8, cx, cy - 17 - t * 10);
+    ctx.stroke();
+  }
+
+  // Front posts
+  ctx.fillStyle = "#5c3a1b";
+  ctx.fillRect(g.L + 1, awningY + 8, 3, g.base - counterH - awningY - 8);
+  ctx.fillRect(g.R - 4, awningY + 8, 3, g.base - counterH - awningY - 8);
+
+  // Striped awning (sloped top + scalloped front edge)
+  const stripes = 6;
+  const sw = (g.W + 8) / stripes;
+  for (let i = 0; i < stripes; i++) {
+    const x0 = g.L - 4 + i * sw;
+    polygonPath(ctx, [
+      [x0, awningY + 10],
+      [x0 + sw, awningY + 10],
+      [x0 + sw + g.dx, awningY + 10 - g.dy],
+      [x0 + g.dx, awningY + 10 - g.dy],
+    ]);
+    fillStroke(ctx, i % 2 ? "#fff7ed" : v.roofColor, 1);
+  }
+  for (let i = 0; i < stripes; i++) {
+    const x0 = g.L - 4 + i * sw;
+    ctx.beginPath();
+    ctx.moveTo(x0, awningY + 10);
+    ctx.lineTo(x0 + sw, awningY + 10);
+    ctx.arc(x0 + sw / 2, awningY + 10, sw / 2, 0, Math.PI);
+    ctx.closePath();
+    fillStroke(ctx, i % 2 ? "#fff7ed" : v.roofColor, 1);
+  }
+  // Name plate on top of the awning
+  roundRectPath(ctx, g.sx - 18 + g.dx / 2, awningY - 4 - g.dy / 2, 36, 11, 3);
+  fillStroke(ctx, "#3b2a1a", 1.2);
+  ctx.fillStyle = "#fde68a";
+  ctx.font = "800 7px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("KOPI", g.sx + g.dx / 2, awningY + 1.5 - g.dy / 2);
+}
+
+const NEON = ["#ec4899", "#a855f7", "#22d3ee", "#facc15"];
+
+/** Dark club with a neon "AGL" sign, rope line, and sweeping spotlights */
+function drawDisco(ctx: CanvasRenderingContext2D, g: Geo, v: BuildingVisual, time: number): void {
+  const hue = Math.floor(time / 450) % NEON.length;
+
+  // Subtle brick rows
+  ctx.strokeStyle = shade(v.wallColor, 14);
+  ctx.lineWidth = 1;
+  for (let y = g.T + 8; y < g.base - 6; y += 8) {
+    ctx.beginPath();
+    ctx.moveTo(g.L + 1, y);
+    ctx.lineTo(g.R - 1, y);
+    ctx.stroke();
+  }
+
+  // Neon stripe along the top edge
+  ctx.save();
+  ctx.shadowColor = NEON[(hue + 1) % NEON.length];
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = NEON[(hue + 1) % NEON.length];
+  ctx.fillRect(g.L + 3, g.T + 4, g.W - 6, 2.5);
+  ctx.restore();
+
+  // Big neon "AGL" sign
+  roundRectPath(ctx, g.sx - 34, g.T + 10, 68, 26, 4);
+  fillStroke(ctx, "#0f0a1a", 1.6, v.trimColor);
+  ctx.save();
+  ctx.shadowColor = NEON[hue];
+  ctx.shadowBlur = 14;
+  ctx.fillStyle = NEON[hue];
+  ctx.font = "900 19px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("AGL", g.sx, g.T + 24);
+  ctx.restore();
+
+  // Round porthole windows flashing different colors
+  for (let i = 0; i < 2; i++) {
+    const wx = i === 0 ? g.L + 16 : g.R - 16;
+    const wy = g.base - 32;
+    ctx.beginPath();
+    ctx.arc(wx, wy, 8, 0, Math.PI * 2);
+    fillStroke(ctx, NEON[(hue + i + 2) % NEON.length], 1.6, "#0f0a1a");
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.beginPath();
+    ctx.arc(wx - 2.5, wy - 2.5, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Glowing doorway
+  const dw = 26;
+  const dh = 30;
+  ctx.save();
+  ctx.shadowColor = NEON[(hue + 1) % NEON.length];
+  ctx.shadowBlur = 12;
+  roundRectPath(ctx, g.sx - dw / 2 - 2, g.base - dh - 8, dw + 4, dh + 2, 3);
+  fillStroke(ctx, v.trimColor, 1.4, "#0f0a1a");
+  ctx.restore();
+  ctx.beginPath();
+  ctx.rect(g.sx - dw / 2, g.base - dh - 6, dw, dh);
+  fillStroke(ctx, v.doorColor, 1.2);
+  ctx.strokeStyle = "#3b2a55";
+  ctx.beginPath();
+  ctx.moveTo(g.sx, g.base - dh - 6);
+  ctx.lineTo(g.sx, g.base - 6);
+  ctx.stroke();
+
+  // Velvet rope with gold stanchions in front of the door
+  const ropeY = g.base + 2;
+  for (const px of [g.sx - 26, g.sx + 26]) {
+    ctx.fillStyle = "#facc15";
+    ctx.fillRect(px - 1.5, ropeY - 14, 3, 14);
+    ctx.beginPath();
+    ctx.arc(px, ropeY - 15, 2.6, 0, Math.PI * 2);
+    fillStroke(ctx, "#fde047", 1);
+  }
+  ctx.strokeStyle = "#be123c";
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(g.sx - 26, ropeY - 12);
+  ctx.quadraticCurveTo(g.sx - 13, ropeY - 4, g.sx - 6, ropeY - 9);
+  ctx.moveTo(g.sx + 6, ropeY - 9);
+  ctx.quadraticCurveTo(g.sx + 13, ropeY - 4, g.sx + 26, ropeY - 12);
+  ctx.stroke();
+
+  // Neon stripes on the side wall
+  onSide(ctx, g, () => {
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = NEON[(hue + i) % NEON.length];
+      ctx.fillRect(6, -g.H + 14 + i * 18, g.D - 12, 3);
+    }
+  });
+
+  flatRoof(ctx, g, v);
+
+  // Sweeping spotlights from the roof
+  const rx = g.sx + g.dx * 0.5;
+  const ry = g.T - g.dy * 0.5;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < 3; i++) {
+    const a = -Math.PI / 2 + Math.sin(time * 0.0012 + i * 2.1) * 0.55;
+    const len = 70;
+    const spread = 0.12;
+    ctx.fillStyle = `${NEON[(hue + i) % NEON.length]}33`;
+    ctx.beginPath();
+    ctx.moveTo(rx + (i - 1) * 22, ry);
+    ctx.lineTo(rx + (i - 1) * 22 + Math.cos(a - spread) * len, ry + Math.sin(a - spread) * len);
+    ctx.lineTo(rx + (i - 1) * 22 + Math.cos(a + spread) * len, ry + Math.sin(a + spread) * len);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Spinning disco ball on the roof
+  const bx = rx;
+  const by = ry - 12;
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(bx, ry);
+  ctx.lineTo(bx, by + 7);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(bx, by, 7.5, 0, Math.PI * 2);
+  fillStroke(ctx, "#cbd5e1", 1.3);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(bx, by, 7, 0, Math.PI * 2);
+  ctx.clip();
+  const spin = (time * 0.004) % 3;
+  for (let yy = -7; yy < 7; yy += 3) {
+    for (let xx = -9; xx < 9; xx += 3) {
+      const lit = (Math.floor(xx + spin * 3) + yy) % 4 === 0;
+      ctx.fillStyle = lit ? "#ffffff" : (xx + yy) % 2 ? "#94a3b8" : "#e2e8f0";
+      ctx.fillRect(bx + xx + spin, by + yy, 2.4, 2.4);
+    }
+  }
+  ctx.restore();
+}
 
 function drawHome(ctx: CanvasRenderingContext2D, g: Geo, v: BuildingVisual): void {
   // Front windows with shutters + flower boxes

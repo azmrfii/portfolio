@@ -15,16 +15,20 @@ export function drawNpc(w: WorldRenderContext, npc: NpcData, state?: NpcDrawStat
   if (x < -60 || y < -90 || x > w.viewW + 60 || y > w.viewH + 60) return;
 
   const waving = state?.waving ?? false;
+  const dancing = npc.dancing ?? false;
+
+  // Dancers hop to the beat
+  const hop = dancing && !waving ? Math.abs(Math.sin(time * 0.009 + npc.x)) * 3 : 0;
 
   drawCharacter(
     ctx,
     x,
-    y,
+    y - hop,
     npc.look,
     {
       facing: "down",
-      moving: false,
-      walkTime: 0,
+      moving: dancing && !waving,
+      walkTime: dancing ? time * 0.8 : 0,
       waving,
       waveTime: state?.animTime ?? 0,
       time,
@@ -34,6 +38,6 @@ export function drawNpc(w: WorldRenderContext, npc: NpcData, state?: NpcDrawStat
   );
 
   if (waving) {
-    drawSpeechBubble(ctx, x, y - 56, "Halo Azzam!", time);
+    drawSpeechBubble(ctx, x, y - 56, npc.greeting ?? "Halo Azzam!", time);
   }
 }

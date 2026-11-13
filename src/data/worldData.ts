@@ -1,4 +1,4 @@
-export type BuildingKind = "home" | "school" | "office";
+export type BuildingKind = "home" | "school" | "office" | "shop" | "hangout";
 
 export type BuildingId =
   | "home"
@@ -6,7 +6,9 @@ export type BuildingId =
   | "sd"
   | "smp"
   | "sma"
+  | "coffee"
   | "kuliah"
+  | "agl"
   | "office1"
   | "office2"
   | "office3";
@@ -20,7 +22,7 @@ export interface ModalContent {
 }
 
 export interface BuildingVisual {
-  style: "home" | "school" | "campus" | "office";
+  style: "home" | "school" | "campus" | "office" | "coffee" | "disco";
   /** Front face width */
   width: number;
   /** Front wall height (without roof) */
@@ -35,6 +37,8 @@ export interface BuildingVisual {
   trimColor: string;
   windowColor: string;
   doorColor: string;
+  /** Extra sprite height above the walls (awnings, rooftop props) for click bounds & hints */
+  extraTop?: number;
 }
 
 export interface BuildingData {
@@ -72,6 +76,10 @@ export interface NpcData {
   y: number;
   look: CharacterLook;
   dialogue?: string[];
+  /** Bob in place like they're dancing */
+  dancing?: boolean;
+  /** Greeting shown in the speech bubble (defaults to "Halo Azzam!") */
+  greeting?: string;
 }
 
 export interface DecorItem {
@@ -81,7 +89,7 @@ export interface DecorItem {
   y: number;
 }
 
-export const WORLD_WIDTH = 1160;
+export const WORLD_WIDTH = 1360;
 export const WORLD_HEIGHT = 770;
 export const PLAYER_SPEED = 150;
 export const CAMERA_LERP = 0.12;
@@ -107,6 +115,8 @@ export const JUMP_TARGETS: { id: string; label: string; x: number; y: number }[]
   { id: "schools", label: "Sekolah", x: 520, y: 340 },
   { id: "campus", label: "Kuliah", x: 930, y: 650 },
   { id: "offices", label: "Kantor", x: 380, y: 650 },
+  { id: "coffee", label: "Kopi", x: 1060, y: 340 },
+  { id: "agl", label: "AGL", x: 1150, y: 650 },
 ];
 
 /** Row 1 (schools) runs left→right, then the road turns down and row 2 (campus → offices) runs back right→left */
@@ -120,8 +130,8 @@ const ROW2_BASE = ROW2_Y - ROAD_GAP;
 /** Simple U-shaped road: two straight streets joined by one connector */
 export const road: { x: number; y: number }[] = [
   { x: 110, y: ROW1_Y },
-  { x: 1080, y: ROW1_Y },
-  { x: 1080, y: ROW2_Y },
+  { x: 1280, y: ROW1_Y },
+  { x: 1280, y: ROW2_Y },
   { x: 110, y: ROW2_Y },
 ];
 export const ROAD_WIDTH = 40;
@@ -287,6 +297,38 @@ export const buildings: BuildingData[] = [
     },
   },
   {
+    id: "coffee",
+    kind: "shop",
+    name: "Stand Kopi",
+    shortLabel: "Kopi ☕",
+    signLines: ["Ngopi dulu"],
+    x: 1060,
+    y: ROW1_BASE,
+    visual: {
+      style: "coffee",
+      width: 72,
+      wallHeight: 30,
+      depth: 34,
+      roofHeight: 0,
+      floors: 1,
+      wallColor: "#8b5a2b",
+      roofColor: "#b91c1c",
+      trimColor: "#5c3a1b",
+      windowColor: "#fde68a",
+      doorColor: "#3b2a1a",
+      extraTop: 36,
+    },
+    modal: {
+      title: "Stand Kopi — Ngopi Dulu",
+      subtitle: "Bahan bakar sebelum ngoding",
+      paragraphs: [
+        "(Placeholder) Mampir bentar sebelum lanjut perjalanan. Ceritain kopi favoritmu di sini — misalnya es kopi susu gula aren, americano, atau manual brew.",
+      ],
+      bullets: ["Menu favorit: (isi nanti)", "Tempat ngopi langganan: (isi nanti)"],
+      tags: ["Coffee", "Ngopi"],
+    },
+  },
+  {
     id: "kuliah",
     kind: "school",
     name: "Universitas Telkom",
@@ -315,6 +357,39 @@ export const buildings: BuildingData[] = [
       ],
       bullets: ["Kuliah Online", "RAM beberapa matkul karena sudah kerja", "Aku mencintaimu LMS saat menjelang UAS"],
       tags: ["Engineering", "Informatika"],
+    },
+  },
+  {
+    id: "agl",
+    kind: "hangout",
+    name: "AGL",
+    shortLabel: "AGL",
+    signLines: ["Teman Rumah"],
+    x: 1150,
+    y: ROW2_BASE,
+    visual: {
+      style: "disco",
+      width: 116,
+      wallHeight: 78,
+      depth: 58,
+      roofHeight: 0,
+      floors: 1,
+      wallColor: "#2a1f3d",
+      roofColor: "#1c1530",
+      trimColor: "#ec4899",
+      windowColor: "#a855f7",
+      doorColor: "#0f0a1a",
+      extraTop: 24,
+    },
+    modal: {
+      title: "AGL — Teman Rumah",
+      subtitle: "Tempat nongkrong bareng teman-teman rumah 🪩",
+      paragraphs: [
+        "(Placeholder) Ini markasnya teman-teman rumah — tempat ngumpul, ketawa, dan cerita sampai lupa waktu.",
+        "Isi nanti: siapa aja anggotanya, asal-usul nama AGL, dan momen paling seru bareng mereka.",
+      ],
+      bullets: ["Anggota: (isi nanti)", "Kegiatan favorit: (isi nanti)", "Momen paling berkesan: (isi nanti)"],
+      tags: ["Friends", "Hangout", "AGL"],
     },
   },
   {
@@ -439,6 +514,10 @@ const npcLooks: Record<string, [CharacterLook, CharacterLook]> = {
     { skin: "#e8b48a", hair: "#2b1d14", hairStyle: "short", shirt: "#166534", pants: "#1f2937", shoes: "#111827" },
     { skin: "#f6cfa8", hair: "#6b3f24", hairStyle: "ponytail", shirt: "#7c3aed", pants: "#1f2937", shoes: "#111827" },
   ],
+  agl: [
+    { skin: "#e8b48a", hair: "#1f1a17", hairStyle: "spiky", shirt: "#ec4899", pants: "#111827", shoes: "#f8fafc" },
+    { skin: "#f2c39b", hair: "#2b1d14", hairStyle: "short", shirt: "#22d3ee", pants: "#1f2937", shoes: "#f8fafc" },
+  ],
 };
 
 const npcNames: Record<string, [string, string]> = {
@@ -450,13 +529,40 @@ const npcNames: Record<string, [string, string]> = {
   office1: ["Ken", "Alya"],
   office2: ["Rio", "Elena"],
   office3: ["Farhan", "Mira"],
+  agl: ["Teman 1", "Teman 2"],
+};
+
+/** The coffee seller stands behind the counter (drawn by the stand itself) plus one customer */
+const COFFEE_CUSTOMER: CharacterLook = {
+  skin: "#f6cfa8",
+  hair: "#3b2618",
+  hairStyle: "bob",
+  shirt: "#f59e0b",
+  pants: "#334155",
+  shoes: "#3b2a1a",
 };
 
 export const npcs: NpcData[] = buildings
   .filter((b) => b.kind !== "home")
-  .flatMap((b) => {
+  .flatMap((b): NpcData[] => {
+    if (b.id === "coffee") {
+      return [
+        {
+          id: "coffee-customer",
+          buildingId: b.id,
+          name: "Pelanggan",
+          gender: "female",
+          x: b.x - b.visual.width / 2 - 14,
+          y: b.y + 20,
+          look: COFFEE_CUSTOMER,
+          greeting: "Kopinya enak! ☕",
+        },
+      ];
+    }
     const [mName, fName] = npcNames[b.id];
     const [mLook, fLook] = npcLooks[b.id];
+    const dancing = b.id === "agl";
+    const greeting = dancing ? "Woi Zam, sini! 🪩" : undefined;
     // Stand beside the front corners so the name sign stays readable
     const offset = b.visual.width / 2 + 14;
     return [
@@ -469,6 +575,8 @@ export const npcs: NpcData[] = buildings
         y: b.y + 20,
         look: mLook,
         dialogue: ["Halo Azzam!"],
+        dancing,
+        greeting,
       },
       {
         id: `${b.id}-f`,
@@ -479,6 +587,8 @@ export const npcs: NpcData[] = buildings
         y: b.y + 20,
         look: fLook,
         dialogue: ["Halo Azzam!"],
+        dancing,
+        greeting,
       },
     ];
   });
@@ -489,35 +599,37 @@ export const decor: DecorItem[] = [
   { id: "t2", kind: "pine", x: 425, y: 110 },
   { id: "t3", kind: "tree", x: 615, y: 118 },
   { id: "t4", kind: "pine", x: 805, y: 110 },
-  { id: "t5", kind: "tree", x: 1060, y: 150 },
+  { id: "t5", kind: "tree", x: 1180, y: 150 },
   { id: "t6", kind: "pine", x: 45, y: 120 },
+  { id: "t15", kind: "pine", x: 1300, y: 120 },
   // Left & right edges
   { id: "t7", kind: "pine", x: 45, y: 480 },
-  { id: "t8", kind: "tree", x: 1132, y: 540 },
   // Bottom strip, below the second street
   { id: "t9", kind: "tree", x: 90, y: 745 },
   { id: "t10", kind: "pine", x: 290, y: 750 },
   { id: "t11", kind: "tree", x: 470, y: 748 },
   { id: "t12", kind: "pine", x: 640, y: 752 },
   { id: "t13", kind: "tree", x: 1000, y: 748 },
-  { id: "t14", kind: "pine", x: 1120, y: 750 },
+  { id: "t14", kind: "pine", x: 1180, y: 750 },
+  { id: "t16", kind: "tree", x: 1310, y: 748 },
   { id: "b1", kind: "bush", x: 60, y: 300 },
-  { id: "b2", kind: "bush", x: 1128, y: 640 },
+  { id: "b2", kind: "bush", x: 1330, y: 640 },
   { id: "b3", kind: "bush", x: 745, y: 470 },
   { id: "b4", kind: "bush", x: 60, y: 600 },
+  { id: "b5", kind: "bush", x: 1330, y: 520 },
   { id: "f1", kind: "flowers", x: 236, y: 290 },
   { id: "f2", kind: "flowers", x: 805, y: 292 },
   { id: "f3", kind: "flowers", x: 745, y: 520 },
   { id: "f4", kind: "flowers", x: 380, y: 712 },
   { id: "f5", kind: "flowers", x: 880, y: 714 },
-  { id: "f6", kind: "flowers", x: 1125, y: 300 },
+  { id: "f6", kind: "flowers", x: 1160, y: 296 },
   { id: "r1", kind: "rock", x: 560, y: 716 },
   { id: "r2", kind: "rock", x: 820, y: 750 },
   // Street lamps along both streets
   { id: "l1", kind: "lamp", x: 425, y: 308 },
   { id: "l2", kind: "lamp", x: 615, y: 308 },
-  { id: "l3", kind: "lamp", x: 1040, y: 308 },
-  { id: "l4", kind: "lamp", x: 1120, y: 420 },
+  { id: "l3", kind: "lamp", x: 1220, y: 308 },
+  { id: "l4", kind: "lamp", x: 1325, y: 420 },
   { id: "l5", kind: "lamp", x: 200, y: 684 },
   { id: "l6", kind: "lamp", x: 940, y: 684 },
 ];
@@ -530,7 +642,7 @@ export function getBuildingBounds(b: BuildingData) {
   return {
     left: b.x - v.width / 2 - 8,
     right: b.x + v.width / 2 + dx + 8,
-    top: b.y - v.wallHeight - v.roofHeight - dy - 16,
+    top: b.y - v.wallHeight - v.roofHeight - dy - 16 - (v.extraTop ?? 0),
     bottom: b.y + 12,
   };
 }

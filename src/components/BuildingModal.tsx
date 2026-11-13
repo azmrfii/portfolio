@@ -1,6 +1,14 @@
 "use client";
 
-import type { BuildingData } from "@/data/worldData";
+import type { BuildingData, BuildingKind } from "@/data/worldData";
+
+const KIND_LABEL: Record<BuildingKind, string> = {
+  home: "Start",
+  school: "Education",
+  office: "Experience",
+  shop: "Break Time",
+  hangout: "Friends",
+};
 
 interface BuildingModalProps {
   building: BuildingData | null;
@@ -29,7 +37,7 @@ export default function BuildingModal({ building, onClose }: BuildingModalProps)
         <div className="flex items-start justify-between gap-3 border-b-4 border-[#5b3a29] pb-3 mb-4">
           <div>
             <p className="text-[10px] uppercase tracking-[0.2em] text-[#8b6914] mb-1">
-              {kind === "home" ? "Start" : kind === "school" ? "Education" : "Experience"} · {shortLabel}
+              {KIND_LABEL[kind]} · {shortLabel}
             </p>
             <h2
               id="building-modal-title"

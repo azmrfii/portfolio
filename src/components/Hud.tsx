@@ -28,7 +28,13 @@ interface HudProps {
   onExitHouse: () => void;
 }
 
-const KIND_COLOR = { home: "#c2553a", school: "#f59e0b", office: "#475569" } as const;
+const KIND_COLOR = {
+  home: "#c2553a",
+  school: "#f59e0b",
+  office: "#475569",
+  shop: "#92400e",
+  hangout: "#a855f7",
+} as const;
 
 export default function Hud({
   scene,
