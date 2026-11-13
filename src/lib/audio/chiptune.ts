@@ -1,10 +1,11 @@
 "use client";
 
-export type BgmTheme = "town" | "house";
+export type BgmTheme = "town" | "house" | "agl";
 
 // Note frequencies (Hz)
 const N: Record<string, number> = {
   _: 0,
+  A2: 110.0, B2: 123.47,
   C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196.0, A3: 220.0, B3: 246.94,
   C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.0, A4: 440.0, B4: 493.88,
   C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880.0,
@@ -54,6 +55,29 @@ const HOUSE_BASS: string[] = [
   "D3", "_", "_", "_", "A3", "_", "_", "_",
   "F3", "_", "_", "_", "G3", "_", "_", "_",
   "C3", "_", "_", "_", "C3", "_", "_", "_",
+];
+
+// Pumping 8-bit disco/electronic theme for AGL bar
+const AGL_MELODY: string[] = [
+  "A4", "C5", "E5", "A5", "G5", "E5", "D5", "E5",
+  "A4", "C5", "E5", "G5", "F5", "E5", "D5", "C5",
+  "D5", "F5", "A5", "G5", "F5", "D5", "E5", "F5",
+  "E5", "D5", "C5", "B4", "A4", "B4", "C5", "E5",
+  "A5", "A5", "G5", "E5", "G5", "G5", "E5", "D5",
+  "F5", "F5", "E5", "D5", "E5", "D5", "C5", "B4",
+  "A4", "E5", "A5", "G5", "E5", "D5", "C5", "D5",
+  "E5", "D5", "C5", "B4", "A4", "_",  "E5", "_",
+];
+
+const AGL_BASS: string[] = [
+  "A2", "A3", "A2", "A3", "A2", "A3", "G3", "E3",
+  "F3", "F3", "F3", "E3", "D3", "D3", "E3", "G3",
+  "D3", "D3", "F3", "A3", "G3", "G3", "B3", "D4",
+  "E3", "E3", "G3", "B3", "A2", "A3", "A2", "A3",
+  "A2", "A3", "A2", "A3", "C3", "C4", "C3", "C4",
+  "D3", "D4", "D3", "D4", "E3", "E4", "E3", "E4",
+  "F3", "F3", "G3", "G3", "A3", "A3", "G3", "E3",
+  "E3", "E3", "E3", "E3", "A2", "A3", "A2", "_",
 ];
 
 class ChiptuneManager {
@@ -139,31 +163,36 @@ class ChiptuneManager {
       window.clearInterval(this.timer);
       this.timer = null;
     }
-    const stepMs = this.theme === "town" ? 195 : 240;
+    const stepMs = this.theme === "agl" ? 145 : this.theme === "town" ? 195 : 240;
     this.timer = window.setInterval(() => this.tick(), stepMs);
   }
 
   private tick(): void {
     if (this.muted || !this.ctx || !this.masterGain || this.ctx.state !== "running") return;
-    const mel = this.theme === "town" ? TOWN_MELODY : HOUSE_MELODY;
-    const bas = this.theme === "town" ? TOWN_BASS : HOUSE_BASS;
+    const mel = this.theme === "agl" ? AGL_MELODY : this.theme === "town" ? TOWN_MELODY : HOUSE_MELODY;
+    const bas = this.theme === "agl" ? AGL_BASS : this.theme === "town" ? TOWN_BASS : HOUSE_BASS;
     const idx = this.step % mel.length;
     this.step++;
 
     const mNote = mel[idx];
     const bNote = bas[idx];
-    const stepSec = this.theme === "town" ? 0.18 : 0.22;
+    const stepSec = this.theme === "agl" ? 0.13 : this.theme === "town" ? 0.18 : 0.22;
 
     if (mNote && N[mNote]) {
       this.playTone(
         N[mNote],
         stepSec * 0.9,
-        this.theme === "town" ? "square" : "triangle",
-        this.theme === "town" ? 0.14 : 0.22,
+        this.theme === "agl" ? "sawtooth" : this.theme === "town" ? "square" : "triangle",
+        this.theme === "agl" ? 0.16 : this.theme === "town" ? 0.14 : 0.22,
       );
     }
     if (bNote && N[bNote]) {
-      this.playTone(N[bNote], stepSec * 1.4, "triangle", 0.18);
+      this.playTone(
+        N[bNote],
+        stepSec * 1.3,
+        this.theme === "agl" ? "triangle" : "triangle",
+        this.theme === "agl" ? 0.24 : 0.18,
+      );
     }
   }
 
@@ -221,6 +250,25 @@ class ChiptuneManager {
       () => this.playTone(740 * pitch, 0.22, "triangle", 0.22, 460 * pitch),
       120,
     );
+  }
+
+  playShaker(): void {
+    const f = 900 + Math.random() * 400;
+    this.playTone(f, 0.035, "square", 0.08, f - 220);
+  }
+
+  playSip(): void {
+    const start = 320 + Math.random() * 30;
+    this.playTone(start, 0.08, "triangle", 0.22, start + 180);
+  }
+
+  playSparkle(): void {
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((freq, idx) => {
+      window.setTimeout(() => {
+        this.playTone(freq, 0.12, "sine", 0.18);
+      }, idx * 60);
+    });
   }
 }
 

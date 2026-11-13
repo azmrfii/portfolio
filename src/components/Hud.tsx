@@ -1,6 +1,12 @@
 "use client";
 
 import {
+  AGL_HEIGHT,
+  AGL_WIDTH,
+  aglFurniture,
+  aglNpcs,
+} from "@/data/aglData";
+import {
   HOUSE_HEIGHT,
   HOUSE_ROOMS,
   HOUSE_WIDTH,
@@ -19,7 +25,7 @@ import {
 import { useState } from "react";
 
 interface HudProps {
-  scene: "town" | "house";
+  scene: "town" | "house" | "agl";
   playerPos: { x: number; y: number };
   nearestLabel: string | null;
   muted: boolean;
@@ -53,7 +59,11 @@ export default function Hud({
         <div className="pixel-panel !px-3 !py-2 max-w-[290px]">
           <div className="flex items-center justify-between gap-2">
             <h1 className="font-pixel text-[10px] leading-relaxed text-[#3b2a1a]">
-              {scene === "house" ? "🏠 Dalam Rumah Azzam" : "Azzam's Town"}
+              {scene === "house"
+                ? "🏠 Dalam Rumah Azzam"
+                : scene === "agl"
+                  ? "🪩 AGL — Diskotik & Bar"
+                  : "Azzam's Town"}
             </h1>
             <button
               type="button"
@@ -72,6 +82,8 @@ export default function Hud({
               </>
             ) : scene === "house" ? (
               "Keliling perabot & sapa Gray Pi, Kimmy, Boba · E periksa"
+            ) : scene === "agl" ? (
+              "Vibing bareng teman rumah & DJ Valdy · E ngobrol"
             ) : (
               "WASD / panah jalan · Space lambai · E buka"
             )}
@@ -86,7 +98,13 @@ export default function Hud({
             onClick={() => setMapOpen((v) => !v)}
             className="flex w-full items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#5b3a29]"
           >
-            <span>{scene === "house" ? "Denah Rumah" : "Peta Kota"}</span>
+            <span>
+              {scene === "house"
+                ? "Denah Rumah"
+                : scene === "agl"
+                  ? "Denah AGL"
+                  : "Peta Kota"}
+            </span>
             <span aria-hidden>{mapOpen ? "▾" : "▸"}</span>
           </button>
 
@@ -137,7 +155,7 @@ export default function Hud({
                   strokeWidth={8}
                 />
               </svg>
-            ) : (
+            ) : scene === "house" ? (
               <svg
                 viewBox={`0 0 ${HOUSE_WIDTH} ${HOUSE_HEIGHT}`}
                 className="mt-1.5 block w-full rounded-sm border-2 border-[#5b3a29] bg-[#2a1f18]"
@@ -177,6 +195,42 @@ export default function Hud({
                   cy={playerPos.y}
                   r={18}
                   fill="#ef4444"
+                  stroke="#fff"
+                  strokeWidth={6}
+                />
+              </svg>
+            ) : (
+              <svg
+                viewBox={`0 0 ${AGL_WIDTH} ${AGL_HEIGHT}`}
+                className="mt-1.5 block w-full rounded-sm border-2 border-[#ec4899] bg-[#0c0814]"
+                role="img"
+                aria-label="Denah diskotik AGL"
+              >
+                {/* DJ Stage */}
+                <rect x={90} y={70} width={280} height={120} rx={4} fill="#261a3d" stroke="#8b5cf6" strokeWidth={4} />
+                {/* Bar Floor */}
+                <rect x={560} y={70} width={280} height={125} rx={4} fill="#201733" stroke="#ec4899" strokeWidth={4} />
+                {/* Dance Floor */}
+                <rect x={330} y={230} width={260} height={170} rx={6} fill="#3b1e54" stroke="#ec4899" strokeWidth={6} />
+                {aglFurniture.map((f) => (
+                  <rect
+                    key={f.id}
+                    x={f.x - f.width / 2}
+                    y={f.y - f.height}
+                    width={f.width}
+                    height={f.height}
+                    rx={3}
+                    fill={f.isExit ? "#facc15" : "#6366f1"}
+                  />
+                ))}
+                {aglNpcs.map((n) => (
+                  <circle key={n.id} cx={n.x} cy={n.y} r={12} fill="#ec4899" stroke="#fff" strokeWidth={3} />
+                ))}
+                <circle
+                  cx={playerPos.x}
+                  cy={playerPos.y}
+                  r={18}
+                  fill="#facc15"
                   stroke="#fff"
                   strokeWidth={6}
                 />

@@ -514,10 +514,6 @@ const npcLooks: Record<string, [CharacterLook, CharacterLook]> = {
     { skin: "#e8b48a", hair: "#2b1d14", hairStyle: "short", shirt: "#166534", pants: "#1f2937", shoes: "#111827" },
     { skin: "#f6cfa8", hair: "#6b3f24", hairStyle: "ponytail", shirt: "#7c3aed", pants: "#1f2937", shoes: "#111827" },
   ],
-  agl: [
-    { skin: "#e8b48a", hair: "#1f1a17", hairStyle: "spiky", shirt: "#ec4899", pants: "#111827", shoes: "#f8fafc" },
-    { skin: "#f2c39b", hair: "#2b1d14", hairStyle: "short", shirt: "#22d3ee", pants: "#1f2937", shoes: "#f8fafc" },
-  ],
 };
 
 const npcNames: Record<string, [string, string]> = {
@@ -529,7 +525,6 @@ const npcNames: Record<string, [string, string]> = {
   office1: ["Ken", "Alya"],
   office2: ["Rio", "Elena"],
   office3: ["Farhan", "Mira"],
-  agl: ["Teman 1", "Teman 2"],
 };
 
 /** The coffee seller stands behind the counter (drawn by the stand itself) plus one customer */
@@ -543,7 +538,7 @@ const COFFEE_CUSTOMER: CharacterLook = {
 };
 
 export const npcs: NpcData[] = buildings
-  .filter((b) => b.kind !== "home")
+  .filter((b) => b.kind !== "home" && b.id !== "agl")
   .flatMap((b): NpcData[] => {
     if (b.id === "coffee") {
       return [
@@ -561,8 +556,6 @@ export const npcs: NpcData[] = buildings
     }
     const [mName, fName] = npcNames[b.id];
     const [mLook, fLook] = npcLooks[b.id];
-    const dancing = b.id === "agl";
-    const greeting = dancing ? "Woi Zam, sini! 🪩" : undefined;
     // Stand beside the front corners so the name sign stays readable
     const offset = b.visual.width / 2 + 14;
     return [
@@ -575,8 +568,6 @@ export const npcs: NpcData[] = buildings
         y: b.y + 20,
         look: mLook,
         dialogue: ["Halo Azzam!"],
-        dancing,
-        greeting,
       },
       {
         id: `${b.id}-f`,
@@ -587,8 +578,6 @@ export const npcs: NpcData[] = buildings
         y: b.y + 20,
         look: fLook,
         dialogue: ["Halo Azzam!"],
-        dancing,
-        greeting,
       },
     ];
   });

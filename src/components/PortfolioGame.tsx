@@ -11,7 +11,7 @@ import VirtualControls from "./VirtualControls";
 
 export default function PortfolioGame() {
   const apiRef = useRef<GameCanvasHandle | null>(null);
-  const [scene, setScene] = useState<"town" | "house">("town");
+  const [scene, setScene] = useState<"town" | "house" | "agl">("town");
   const [playerPos, setPlayerPos] = useState(PLAYER_START);
   const [nearestLabel, setNearestLabel] = useState<string | null>(null);
   const [activeBuilding, setActiveBuilding] = useState<BuildingData | null>(null);

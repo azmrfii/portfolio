@@ -1,6 +1,21 @@
 "use client";
 
 import {
+  AGL_HEIGHT,
+  AGL_SPAWN,
+  AGL_WIDTH,
+  BAR_COUNTER_TOP_Y,
+  BAR_SERVE_RANGE,
+  DRINKS,
+  TOWN_AGL_DOOR,
+  aglFurniture,
+  aglNpcs,
+  isAglBlocked,
+  type AglFurnitureItem,
+  type AglNpcData,
+  type DrinkId,
+} from "@/data/aglData";
+import {
   ABOUT_DIALOG,
   BUCKET_LIST,
   HOUSE_HEIGHT,
@@ -30,8 +45,16 @@ import {
   type BuildingData,
 } from "@/data/worldData";
 import { sound } from "@/lib/audio/chiptune";
+import { baristaFrame, type BaristaFrame, type BaristaOrder } from "@/lib/canvas/barista";
 import {
   BRIDGE_RAIL_SORT_Y,
+  DRINK_DURATION,
+  aglFurnitureTopY,
+  drawAglFurnitureItem,
+  drawAglGround,
+  drawAglLighting,
+  drawAglNpc,
+  drinkSipsDone,
   drawBridgeFrontRail,
   drawBuilding,
   drawCat,
@@ -45,7 +68,9 @@ import {
   drawWorldGround,
   updatePlayerAnimation,
   type CatRuntimeState,
+  type CounterDrink,
   type Facing,
+  type PlayerDrinkingState,
   type InputState,
   type NpcDrawState,
   type PlayerState,
@@ -69,8 +94,8 @@ interface VirtualDirs {
 }
 
 interface GameCanvasProps {
-  scene: "town" | "house";
-  onSceneChange: (scene: "town" | "house") => void;
+  scene: "town" | "house" | "agl";
+  onSceneChange: (scene: "town" | "house" | "agl") => void;
   onNearestLabelChange: (label: string | null) => void;
   onOpenBuilding: (building: BuildingData) => void;
   onOpenDialog: (dialog: RpgDialogData) => void;
@@ -90,6 +115,15 @@ type HouseDrawItem =
 type HouseTarget =
   | { kind: "furniture"; item: HouseDialogueItem }
   | { kind: "cat"; cat: CatData; state: CatRuntimeState };
+
+type AglDrawItem =
+  | { kind: "furniture"; sortY: number; index: number }
+  | { kind: "npc"; sortY: number; index: number }
+  | { kind: "player"; sortY: number };
+
+type AglTarget =
+  | { kind: "furniture"; item: AglFurnitureItem }
+  | { kind: "npc"; npc: AglNpcData };
 
 const GAME_KEYS = new Set([
   "ArrowLeft",
@@ -143,9 +177,10 @@ export default function GameCanvas({
     waveTimer: 0,
   });
   /** Furniture the player is currently sitting or sleeping on */
-  const seatRef = useRef<HouseDialogueItem | null>(null);
+  const seatRef = useRef<HouseDialogueItem | AglFurnitureItem | null>(null);
   const cameraRef = useRef({ x: 0, y: 0 });
-  const sceneRef = useRef<"town" | "house">(scene);
+  const sceneRef = useRef<"town" | "house" | "agl">(scene);
+  const lastInteriorRef = useRef<"house" | "agl">("house");
   const fadeRef = useRef<{ alpha: number; dir: -1 | 0 | 1; onMid?: () => void }>({
     alpha: 0,
     dir: 0,
@@ -154,6 +189,12 @@ export default function GameCanvas({
 
   const nearestBuildingRef = useRef<BuildingData | null>(null);
   const nearestHouseRef = useRef<HouseTarget | null>(null);
+  const nearestAglRef = useRef<AglTarget | null>(null);
+
+  const dymasCraftingRef = useRef<(BaristaOrder & { lastSfx: number; lastStep: number }) | null>(null);
+  const playerDrinkingRef = useRef<PlayerDrinkingState | null>(null);
+  /** Glass sitting on the bar counter (served, or empty after drinking) */
+  const counterDrinkRef = useRef<CounterDrink | null>(null);
 
   const npcStateRef = useRef<Record<string, NpcDrawState>>(
     Object.fromEntries(npcs.map((n) => [n.id, { waving: false, animTime: 0 }])),
@@ -179,19 +220,24 @@ export default function GameCanvas({
   const interactLatch = useRef(false);
   const waveLatch = useRef(false);
   const overlayOpenRef = useRef(overlayOpen);
+  const onOpenDialogRef = useRef(onOpenDialog);
 
   useEffect(() => {
     overlayOpenRef.current = overlayOpen;
   }, [overlayOpen]);
 
   useEffect(() => {
+    onOpenDialogRef.current = onOpenDialog;
+  }, [onOpenDialog]);
+
+  useEffect(() => {
     sceneRef.current = scene;
   }, [scene]);
 
   const transitionToScene = useCallback(
-    (target: "town" | "house") => {
+    (target: "town" | "house" | "agl") => {
       if (fadeRef.current.dir !== 0) return;
-      sound.playDoor(target === "house");
+      sound.playDoor(target !== "town");
       fadeRef.current = {
         alpha: 0,
         dir: 1,
@@ -202,19 +248,32 @@ export default function GameCanvas({
           const p = playerRef.current;
           p.pose = "stand";
           seatRef.current = null;
+          dymasCraftingRef.current = null;
+          playerDrinkingRef.current = null;
+          counterDrinkRef.current = null;
           const canvas = canvasRef.current;
           const vw = canvas?.clientWidth ?? 800;
           const vh = canvas?.clientHeight ?? 600;
           if (target === "house") {
+            lastInteriorRef.current = "house";
             p.x = HOUSE_SPAWN.x;
             p.y = HOUSE_SPAWN.y;
             p.facing = "up";
             exitCooldownRef.current = 700;
             cameraRef.current.x = cameraTarget(p.x, vw, HOUSE_WIDTH);
             cameraRef.current.y = cameraTarget(p.y, vh, HOUSE_HEIGHT);
+          } else if (target === "agl") {
+            lastInteriorRef.current = "agl";
+            p.x = AGL_SPAWN.x;
+            p.y = AGL_SPAWN.y;
+            p.facing = "up";
+            exitCooldownRef.current = 700;
+            cameraRef.current.x = cameraTarget(p.x, vw, AGL_WIDTH);
+            cameraRef.current.y = cameraTarget(p.y, vh, AGL_HEIGHT);
           } else {
-            p.x = TOWN_HOUSE_DOOR.x;
-            p.y = TOWN_HOUSE_DOOR.y;
+            const door = lastInteriorRef.current === "agl" ? TOWN_AGL_DOOR : TOWN_HOUSE_DOOR;
+            p.x = door.x;
+            p.y = door.y;
             p.facing = "down";
             cameraRef.current.x = cameraTarget(p.x, vw, WORLD_WIDTH);
             cameraRef.current.y = cameraTarget(p.y, vh, WORLD_HEIGHT);
@@ -238,7 +297,7 @@ export default function GameCanvas({
     seatRef.current = null;
   }, []);
 
-  const sitOn = useCallback((item: HouseDialogueItem) => {
+  const sitOn = useCallback((item: HouseDialogueItem | AglFurnitureItem) => {
     const p = playerRef.current;
     const seats = item.seats ?? [];
     if (seats.length === 0) return;
@@ -252,7 +311,7 @@ export default function GameCanvas({
     p.waving = false;
     seatRef.current = item;
 
-    if (item.kind === "sofa") {
+    if ("kind" in item && item.kind === "sofa") {
       // Kimmy loves company on the sofa
       const kimmy = catStateRef.current.kimmy;
       const other = seats.find((s) => s !== seat) ?? seat;
@@ -342,6 +401,123 @@ export default function GameCanvas({
     [onOpenDialog, openLaptopMenu, sitOn, transitionToScene],
   );
 
+  const interactWithAglNpc = useCallback(
+    (npc: AglNpcData) => {
+      sound.playBlip();
+      if (npc.id === "dymas") {
+        if (dymasCraftingRef.current || playerDrinkingRef.current) return;
+        onOpenDialog({
+          speaker: `${npc.name} (${npc.role})`,
+          subtitle: "AGL — Bar & Lounge",
+          pages: npc.pages,
+          tags: npc.tags,
+          choices: npc.choices,
+          onChoice: (id) => {
+            if (id === "drink_sprite" || id === "drink_cola" || id === "drink_popice") {
+              const drinkId: DrinkId =
+                id === "drink_sprite" ? "sprite" : id === "drink_cola" ? "cola" : "popice";
+              const p = playerRef.current;
+              p.facing = "up";
+              p.waving = false;
+              counterDrinkRef.current = null;
+              dymasCraftingRef.current = {
+                drink: drinkId,
+                elapsed: 0,
+                serveX: Math.max(BAR_SERVE_RANGE.min, Math.min(BAR_SERVE_RANGE.max, p.x)),
+                lastSfx: 0,
+                lastStep: -1,
+              };
+              sound.playBlip();
+            } else if (id === "chat") {
+              onOpenDialog({
+                speaker: "💬 Dymas",
+                subtitle: "Ngobrol Santai",
+                pages: [
+                  "Dymas: 'Keren banget Zam karya-karya lu sekarang. Kapan-kapan luangkan waktu nongkrong lamaan ya bro!'",
+                  "Dymas: 'Kalau butuh mood booster pas nongkrong di AGL, tinggal pesen Sprite, Coca Cola, atau Pop Ice!'",
+                ],
+                tags: ["Barista Dymas", "Teman Rumah"],
+              });
+            }
+          },
+        });
+      } else if (npc.id === "valdy") {
+        onOpenDialog({
+          speaker: `${npc.name} (${npc.role})`,
+          subtitle: "AGL — Resident DJ",
+          pages: npc.pages,
+          tags: npc.tags,
+          choices: npc.choices,
+          onChoice: (id) => {
+            if (id === "drop_beat") {
+              sound.playDoor(true);
+              onOpenDialog({
+                speaker: "🎧 Valdy (DJ AGL)",
+                subtitle: "Drop The Beat",
+                pages: ["Valdy: '1, 2, 3... DROP! *BASS BOOSTED* Let's goooo! 🔥'"],
+                tags: ["Drop The Beat", "BASS"],
+              });
+            } else if (id === "chill_music") {
+              onOpenDialog({
+                speaker: "🎧 Valdy (DJ AGL)",
+                subtitle: "Lo-Fi Lounge",
+                pages: [
+                  "Valdy: 'Siap Zam, kita set tempo santai dulu biar enak buat ngobrol bareng Kaila, Syifa, sama Aliyah.'",
+                ],
+                tags: ["Chill Vibes"],
+              });
+            } else if (id === "compliment") {
+              onOpenDialog({
+                speaker: "✨ Valdy",
+                subtitle: "DJ AGL",
+                pages: [
+                  "Valdy: 'Hahaha thank you Zam! Lu emang paling ngerti selera musik yang enak!'",
+                ],
+              });
+            }
+          },
+        });
+      } else {
+        onOpenDialog({
+          speaker: `${npc.name} (${npc.role})`,
+          subtitle: "AGL — Teman Rumah",
+          pages: npc.pages,
+          tags: npc.tags,
+        });
+      }
+    },
+    [onOpenDialog],
+  );
+
+  const interactWithAglFurniture = useCallback(
+    (item: AglFurnitureItem) => {
+      if (item.isExit) {
+        transitionToScene("town");
+        return;
+      }
+      sound.playBlip();
+      if (item.action === "sit") {
+        sitOn(item);
+        return;
+      }
+      if (item.id === "bar_counter") {
+        const dymas = aglNpcs.find((n) => n.id === "dymas");
+        if (dymas) {
+          interactWithAglNpc(dymas);
+          return;
+        }
+      }
+      onOpenDialog({
+        speaker: item.speaker,
+        subtitle: "AGL Diskotik & Bar",
+        pages: item.pages,
+        tags: item.tags,
+        choices: item.choices,
+      });
+    },
+    [interactWithAglNpc, onOpenDialog, sitOn, transitionToScene],
+  );
+
   const triggerInteract = useCallback(() => {
     sound.unlockAndStart();
     if (sceneRef.current === "town") {
@@ -349,6 +525,8 @@ export default function GameCanvas({
       if (!near) return;
       if (near.id === "home") {
         transitionToScene("house");
+      } else if (near.id === "agl") {
+        transitionToScene("agl");
       } else {
         sound.playBlip();
         onOpenBuilding(near);
@@ -356,12 +534,29 @@ export default function GameCanvas({
       return;
     }
 
+    if (sceneRef.current === "agl") {
+      const p = playerRef.current;
+      const target = nearestAglRef.current;
+      const ordersFromSeat =
+        target && (target.kind === "npc" || target.item.id === "bar_counter");
+      if (p.pose !== "stand" && !ordersFromSeat) {
+        standUp();
+        return;
+      }
+      if (target?.kind === "furniture") interactWithAglFurniture(target.item);
+      else if (target) interactWithAglNpc(target.npc);
+      return;
+    }
+
     // Inside the house
     const p = playerRef.current;
     if (p.pose !== "stand") {
       const seat = seatRef.current;
-      if (p.pose === "sit" && seat?.action === "laptop") openLaptopMenu(seat);
-      else standUp();
+      if (p.pose === "sit" && seat && "action" in seat && seat.action === "laptop") {
+        openLaptopMenu(seat as HouseDialogueItem);
+      } else {
+        standUp();
+      }
       return;
     }
     const target = nearestHouseRef.current;
@@ -377,7 +572,7 @@ export default function GameCanvas({
         tags: ["Cat Lover", target.cat.name],
       });
     }
-  }, [interactWithFurniture, onOpenBuilding, onOpenDialog, openLaptopMenu, standUp, transitionToScene]);
+  }, [interactWithAglFurniture, interactWithAglNpc, interactWithFurniture, onOpenBuilding, onOpenDialog, openLaptopMenu, standUp, transitionToScene]);
 
   const startWave = useCallback(() => {
     sound.unlockAndStart();
@@ -413,7 +608,7 @@ export default function GameCanvas({
         onPlayerPos({ x, y });
       },
       exitHouse: () => {
-        if (sceneRef.current === "house") {
+        if (sceneRef.current === "house" || sceneRef.current === "agl") {
           transitionToScene("town");
         }
       },
@@ -496,10 +691,39 @@ export default function GameCanvas({
         if (hit) {
           if (hit.id === "home") {
             transitionToScene("house");
+          } else if (hit.id === "agl") {
+            transitionToScene("agl");
           } else {
             sound.playBlip();
             onOpenBuilding(hit);
           }
+        }
+        return;
+      }
+
+      if (sceneRef.current === "agl") {
+        // Click on AGL NPCs
+        for (const npc of aglNpcs) {
+          if (Math.abs(mx - npc.x) <= 16 && my >= npc.y - 52 && my <= npc.y + 4) {
+            interactWithAglNpc(npc);
+            return;
+          }
+        }
+        // Click on AGL Furniture
+        const hitF = aglFurniture
+          .filter((f) => f.interactive !== false)
+          .sort((a, b) => (b.sortY ?? b.y) - (a.sortY ?? a.y))
+          .find((f) => {
+            const left = f.x - f.width / 2;
+            const right = f.x + f.width / 2;
+            return mx >= left - 4 && mx <= right + 4 && my >= aglFurnitureTopY(f) && my <= f.y + 6;
+          });
+        if (hitF) {
+          interactWithAglFurniture(hitF);
+          return;
+        }
+        if (playerRef.current.pose !== "stand") {
+          standUp();
         }
         return;
       }
@@ -538,7 +762,7 @@ export default function GameCanvas({
     };
     canvas.addEventListener("click", onClick);
     return () => canvas.removeEventListener("click", onClick);
-  }, [interactWithFurniture, onOpenBuilding, onOpenDialog, transitionToScene]);
+  }, [interactWithAglFurniture, interactWithAglNpc, interactWithFurniture, onOpenBuilding, onOpenDialog, standUp, transitionToScene]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -576,6 +800,7 @@ export default function GameCanvas({
       const input = inputRef.current;
       const virt = virtualRef.current;
       const inHouse = sceneRef.current === "house";
+      const inAgl = sceneRef.current === "agl";
 
       if (exitCooldownRef.current > 0) {
         exitCooldownRef.current = Math.max(0, exitCooldownRef.current - dt);
@@ -595,7 +820,80 @@ export default function GameCanvas({
         if (fade.alpha <= 0) fade.dir = 0;
       }
 
-      const canMove = !overlayOpenRef.current && fade.dir === 0;
+      // Dymas works through the recipe station by station
+      let barista: BaristaFrame | null = null;
+      const crafting = dymasCraftingRef.current;
+      if (crafting) {
+        crafting.elapsed += dt;
+        barista = baristaFrame(crafting);
+        if (barista.stepIndex !== crafting.lastStep && barista.act) {
+          crafting.lastStep = barista.stepIndex;
+          sound.playBlip();
+        }
+        const sfxGap =
+          barista.act === "blend" ? 220 : barista.act === "ice" ? 330 : barista.act === "pour" ? 420 : 0;
+        if (sfxGap && now - crafting.lastSfx > sfxGap) {
+          crafting.lastSfx = now;
+          if (barista.act === "pour") sound.playSip();
+          else sound.playShaker();
+        }
+
+        if (barista.done) {
+          dymasCraftingRef.current = null;
+          barista = null;
+          sound.playSparkle();
+          counterDrinkRef.current = { drink: crafting.drink, x: crafting.serveX, empty: false };
+          playerDrinkingRef.current = {
+            drink: crafting.drink,
+            elapsed: -650,
+            fromX: crafting.serveX,
+            fromY: BAR_COUNTER_TOP_Y,
+            sipsPlayed: 0,
+          };
+        }
+      }
+
+      const drinking = playerDrinkingRef.current;
+      if (drinking) {
+        const wasWaiting = drinking.elapsed < 0;
+        drinking.elapsed += dt;
+        if (wasWaiting && drinking.elapsed >= 0) {
+          // Azzam picks the glass up off the counter
+          counterDrinkRef.current = null;
+          player.facing = "down";
+          player.waving = false;
+        }
+        const sips = drinkSipsDone(drinking.elapsed);
+        if (sips > drinking.sipsPlayed) {
+          drinking.sipsPlayed = sips;
+          sound.playSip();
+          if (sips === 3) setTimeout(() => sound.playSparkle(), 900);
+        }
+
+        if (drinking.elapsed >= DRINK_DURATION) {
+          const finishedDrink = drinking.drink;
+          playerDrinkingRef.current = null;
+          counterDrinkRef.current = { drink: finishedDrink, x: drinking.fromX, empty: true };
+
+          // Open reaction dialog!
+          const drinkData = DRINKS[finishedDrink];
+          onOpenDialogRef.current({
+            speaker: drinkData.badge,
+            subtitle: "AGL Barista Dymas",
+            pages: [
+              `Dymas: "${drinkData.serveDialog}"`,
+              `Azzam: "${drinkData.reactionDialog}"`,
+            ],
+            tags: [drinkData.name, "Segar", "AGL Barista Dymas"],
+          });
+        }
+      }
+
+      const canMove =
+        !overlayOpenRef.current &&
+        fade.dir === 0 &&
+        !playerDrinkingRef.current &&
+        !dymasCraftingRef.current;
       if (canMove) {
         let dx = 0;
         let dy = 0;
@@ -620,7 +918,7 @@ export default function GameCanvas({
         player.vx = dx * PLAYER_SPEED;
         player.vy = dy * PLAYER_SPEED;
 
-        const blockFn = inHouse ? isHouseBlocked : isBlocked;
+        const blockFn = inAgl ? isAglBlocked : inHouse ? isHouseBlocked : isBlocked;
         const nextX = player.x + (player.vx * dt) / 1000;
         if (!blockFn(nextX, player.y)) player.x = nextX;
         const nextY = player.y + (player.vy * dt) / 1000;
@@ -636,6 +934,14 @@ export default function GameCanvas({
           exitCooldownRef.current <= 0 &&
           dy > 0 &&
           Math.abs(player.x - 460) < 36 &&
+          player.y > 584
+        ) {
+          transitionToScene("town");
+        } else if (
+          inAgl &&
+          exitCooldownRef.current <= 0 &&
+          dy > 0 &&
+          Math.abs(player.x - 460) < 40 &&
           player.y > 584
         ) {
           transitionToScene("town");
@@ -656,8 +962,8 @@ export default function GameCanvas({
 
       updatePlayerAnimation(player, Math.hypot(player.vx, player.vy) > 1, dt);
 
-      const mapW = inHouse ? HOUSE_WIDTH : WORLD_WIDTH;
-      const mapH = inHouse ? HOUSE_HEIGHT : WORLD_HEIGHT;
+      const mapW = inAgl ? AGL_WIDTH : inHouse ? HOUSE_WIDTH : WORLD_WIDTH;
+      const mapH = inAgl ? AGL_HEIGHT : inHouse ? HOUSE_HEIGHT : WORLD_HEIGHT;
       const cam = cameraRef.current;
       cam.x += (cameraTarget(player.x, viewW, mapW) - cam.x) * CAMERA_LERP;
       cam.y += (cameraTarget(player.y, viewH, mapH) - cam.y) * CAMERA_LERP;
@@ -678,11 +984,17 @@ export default function GameCanvas({
 
       ctx.clearRect(0, 0, viewW, viewH);
 
-      if (!inHouse) {
+      if (sceneRef.current === "town") {
         // ==================== TOWN RENDER ====================
         const near = findNearestBuilding(player.x, player.y);
         nearestBuildingRef.current = near;
-        const label = near ? (near.id === "home" ? "Masuk ke Rumah" : near.name) : null;
+        const label = near
+          ? near.id === "home"
+            ? "Masuk ke Rumah"
+            : near.id === "agl"
+              ? "Masuk ke AGL 🪩"
+              : near.name
+          : null;
         if (label !== lastLabel) {
           lastLabel = label;
           onNearestLabelChange(label);
@@ -724,15 +1036,139 @@ export default function GameCanvas({
               drawBridgeFrontRail(worldCtx);
               break;
             case "player":
-              drawPlayer(worldCtx, player);
+              drawPlayer(worldCtx, player, playerDrinkingRef.current);
           }
         }
 
         if (near && !overlayOpenRef.current) {
           const r = getBuildingBounds(near);
           const hintText =
-            near.id === "home" ? "E / klik untuk masuk rumah 🏠" : "E / klik untuk buka";
+            near.id === "home"
+              ? "E / klik untuk masuk rumah 🏠"
+              : near.id === "agl"
+                ? "E / klik untuk masuk AGL 🪩"
+                : "E / klik untuk buka";
           drawHint(ctx, near.x - cam.x, r.top - cam.y - 4, hintText);
+        }
+      } else if (sceneRef.current === "agl") {
+        // ==================== AGL DISCO INTERIOR RENDER ====================
+        const busy = !!dymasCraftingRef.current || !!playerDrinkingRef.current;
+        let bestAglTarget: AglTarget | null = null;
+        let bestDist = 44;
+        const counter = aglFurniture.find((f) => f.id === "bar_counter");
+        if (!busy && seatRef.current?.id === "bar_stools" && counter) {
+          bestAglTarget = { kind: "furniture", item: counter };
+        } else if (!busy) {
+          for (const npc of aglNpcs) {
+            const d = Math.hypot(player.x - npc.x, player.y - (npc.talkY ?? npc.y + 4));
+            if (d < bestDist) {
+              bestDist = d;
+              bestAglTarget = { kind: "npc", npc };
+            }
+          }
+          for (const f of aglFurniture) {
+            if (f.interactive === false) continue;
+            if (f.id === "bar_counter" && bestAglTarget?.kind === "npc" && bestAglTarget.npc.id === "dymas") {
+              continue;
+            }
+            const left = f.x - f.width / 2;
+            const right = f.x + f.width / 2;
+            const top = f.y - f.height;
+            const bottom = f.y + 6;
+            const ddx = Math.max(left - player.x, 0, player.x - right);
+            const ddy = Math.max(top - player.y, 0, player.y - bottom);
+            // The bar counter is how you reach Dymas, so it wins over the stools in front of it
+            const d = Math.hypot(ddx, ddy) + (f.id === "bar_counter" ? 0 : 6);
+            if (d < bestDist) {
+              bestDist = d;
+              bestAglTarget = { kind: "furniture", item: f };
+            }
+          }
+        }
+
+        nearestAglRef.current = bestAglTarget;
+        const label = bestAglTarget
+          ? bestAglTarget.kind === "npc"
+            ? bestAglTarget.npc.id === "dymas"
+              ? "Pesan Minuman ke Dymas 🥤"
+              : `Ngobrol dengan ${bestAglTarget.npc.name}`
+            : bestAglTarget.item.id === "bar_counter"
+              ? "Pesan Minuman ke Dymas 🥤"
+              : bestAglTarget.item.name
+          : null;
+        if (label !== lastLabel) {
+          lastLabel = label;
+          onNearestLabelChange(label);
+        }
+
+        drawAglGround(worldCtx);
+
+        const aItems: AglDrawItem[] = [
+          ...aglFurniture.map((f, index) => ({
+            kind: "furniture" as const,
+            sortY: f.sortY ?? f.y,
+            index,
+          })),
+          ...aglNpcs.map((n, index) => ({
+            kind: "npc" as const,
+            sortY: n.y,
+            index,
+          })),
+          { kind: "player", sortY: player.y },
+        ];
+        aItems.sort((a, b) => a.sortY - b.sortY);
+
+        const aglState = {
+          barista,
+          order: dymasCraftingRef.current?.drink ?? null,
+          counterDrink: counterDrinkRef.current,
+        };
+        const dymasTargeted =
+          (bestAglTarget?.kind === "npc" && bestAglTarget.npc.id === "dymas") ||
+          (bestAglTarget?.kind === "furniture" && bestAglTarget.item.id === "bar_counter");
+
+        for (const it of aItems) {
+          switch (it.kind) {
+            case "furniture": {
+              const f = aglFurniture[it.index];
+              const isNear =
+                bestAglTarget?.kind === "furniture" && bestAglTarget.item.id === f.id;
+              drawAglFurnitureItem(worldCtx, f, isNear, aglState);
+              break;
+            }
+            case "npc": {
+              const n = aglNpcs[it.index];
+              const isNear =
+                (bestAglTarget?.kind === "npc" && bestAglTarget.npc.id === n.id) ||
+                (n.id === "dymas" && dymasTargeted);
+              drawAglNpc(worldCtx, n, isNear, aglState);
+              break;
+            }
+            case "player":
+              drawPlayer(worldCtx, player, playerDrinkingRef.current);
+              break;
+          }
+        }
+
+        drawAglLighting(worldCtx);
+
+        if (!overlayOpenRef.current && !busy) {
+          const below = player.y - cam.y + 30;
+          if (player.pose !== "stand" && !dymasTargeted) {
+            drawHint(ctx, player.x - cam.x, below, "E / tombol arah untuk berdiri");
+          } else if (dymasTargeted) {
+            drawHint(ctx, player.x - cam.x, below, "E / klik: Pesan Minuman ke Dymas 🥤");
+          } else if (bestAglTarget?.kind === "npc") {
+            drawHint(ctx, player.x - cam.x, below, `E / klik: Ngobrol dengan ${bestAglTarget.npc.name}`);
+          } else if (bestAglTarget?.kind === "furniture") {
+            const f = bestAglTarget.item;
+            const text = f.isExit
+              ? "E / klik untuk keluar ke kota"
+              : f.action === "sit"
+                ? "E / klik: duduk santai"
+                : `E / klik: ${f.name}`;
+            drawHint(ctx, f.x - cam.x, aglFurnitureTopY(f) - cam.y - 6, text);
+          }
         }
       } else {
         // ==================== HOUSE INTERIOR RENDER ====================
@@ -859,8 +1295,13 @@ export default function GameCanvas({
               break;
             }
             case "player":
-              drawPlayer(worldCtx, player);
-              if (player.pose === "sit" && seatRef.current?.kind === "laptop_desk") {
+              drawPlayer(worldCtx, player, playerDrinkingRef.current);
+              if (
+                player.pose === "sit" &&
+                seatRef.current &&
+                "kind" in seatRef.current &&
+                seatRef.current.kind === "laptop_desk"
+              ) {
                 drawDeskChairBack(worldCtx, seatRef.current);
               }
               break;

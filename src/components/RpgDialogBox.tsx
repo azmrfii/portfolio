@@ -2,7 +2,7 @@
 
 import type { ContactLink } from "@/data/houseData";
 import { sound } from "@/lib/audio/chiptune";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export interface RpgDialogChoice {
   id: string;
@@ -38,7 +38,7 @@ export default function RpgDialogBox({ dialog, onClose, onChoose }: RpgDialogBox
   const currentText = dialog ? (dialog.pages[pageIdx] ?? "") : "";
   const isTyping = charCount < currentText.length;
   const isLastPage = dialog ? pageIdx >= dialog.pages.length - 1 : true;
-  const choices = dialog?.choices ?? [];
+  const choices = useMemo(() => dialog?.choices ?? [], [dialog?.choices]);
   const showChoices = isLastPage && !isTyping && choices.length > 0;
 
   useEffect(() => {

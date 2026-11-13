@@ -14,6 +14,12 @@ export interface CharacterPose {
   seed?: number;
   /** Seated pose; only supported when facing up or down */
   sitting?: boolean;
+  /**
+   * Arms bend inward to hold something in front of the chest (front view),
+   * or reach forward onto a counter (back view). Value = arm angle in radians.
+   */
+  holdArms?: number;
+  expression?: "happy" | "sip";
 }
 
 const LINE = 1.3;
@@ -110,6 +116,12 @@ function drawFrontBack(
   // Long hair behind body when seen from the back
   if (!front) drawBackHair(ctx, look, true);
 
+  const hold = pose.holdArms;
+  if (hold && !front) {
+    drawArm(ctx, -8, -22, -hold, look);
+    drawArm(ctx, 8, -22, hold, look);
+  }
+
   // Torso
   roundRectPath(ctx, -8, -25, 16, 14, 5);
   fillStroke(ctx, look.shirt, LINE);
@@ -128,12 +140,19 @@ function drawFrontBack(
 
   // Arms
   const leftAngle = s * 0.38;
-  drawArm(ctx, -9, -23, leftAngle, look);
-  if (pose.waving && front) {
-    const a = -2.55 + Math.sin(pose.waveTime * 0.018) * 0.4;
-    drawArm(ctx, 9, -23, a, look);
+  if (hold) {
+    if (front) {
+      drawArm(ctx, -9, -23, -hold, look);
+      drawArm(ctx, 9, -23, hold, look);
+    }
   } else {
-    drawArm(ctx, 9, -23, -s * 0.38, look);
+    drawArm(ctx, -9, -23, leftAngle, look);
+    if (pose.waving && front) {
+      const a = -2.55 + Math.sin(pose.waveTime * 0.018) * 0.4;
+      drawArm(ctx, 9, -23, a, look);
+    } else {
+      drawArm(ctx, 9, -23, -s * 0.38, look);
+    }
   }
 
   drawHeadFrontBack(ctx, look, pose, front);
@@ -174,7 +193,10 @@ function drawSitting(
   roundRectPath(ctx, -7.6, -14.5, 15.2, 4, 1.5);
   fillStroke(ctx, look.pants, LINE);
 
-  if (front) {
+  if (front && pose.holdArms) {
+    drawArm(ctx, -9, -23, -pose.holdArms, look);
+    drawArm(ctx, 9, -23, pose.holdArms, look);
+  } else if (front) {
     // Hands resting on the lap
     drawArm(ctx, -9, -23, -0.35, look);
     if (pose.waving) {
@@ -243,8 +265,18 @@ function drawHeadFrontBack(
 
   // Eyes
   for (const ex of [-4.3, 4.3]) {
+    if (pose.expression === "happy") {
+      // Closed ^ ^ eyes
+      ctx.strokeStyle = "#2a201c";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(ex - 2.2, cy + 3.4);
+      ctx.quadraticCurveTo(ex, cy - 0.2, ex + 2.2, cy + 3.4);
+      ctx.stroke();
+      continue;
+    }
     ctx.beginPath();
-    ctx.ellipse(ex, cy + 2.5, 1.75, 2.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(ex, cy + 2.5, 1.75, pose.expression === "sip" ? 1.4 : 2.5, 0, 0, Math.PI * 2);
     ctx.fillStyle = "#2a201c";
     ctx.fill();
     ctx.beginPath();
@@ -254,10 +286,11 @@ function drawHeadFrontBack(
   }
 
   // Blush
-  ctx.fillStyle = "rgba(255, 120, 120, 0.42)";
+  const blushy = pose.expression !== undefined;
+  ctx.fillStyle = blushy ? "rgba(244, 114, 182, 0.7)" : "rgba(255, 120, 120, 0.42)";
   for (const bx of [-7.6, 7.6]) {
     ctx.beginPath();
-    ctx.ellipse(bx, cy + 6, 2.1, 1.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(bx, cy + 6, blushy ? 2.8 : 2.1, blushy ? 1.6 : 1.2, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -265,7 +298,13 @@ function drawHeadFrontBack(
   ctx.strokeStyle = OUTLINE;
   ctx.lineWidth = 1.1;
   ctx.beginPath();
-  if (pose.waving) {
+  if (pose.expression === "sip") {
+    // Puckered lips around the straw
+    ctx.ellipse(0, cy + 7.4, 1.3, 1.1, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "#b8434b";
+    ctx.fill();
+    ctx.stroke();
+  } else if (pose.waving || pose.expression === "happy") {
     ctx.moveTo(-2, cy + 7);
     ctx.quadraticCurveTo(0, cy + 10, 2, cy + 7);
     ctx.closePath();
