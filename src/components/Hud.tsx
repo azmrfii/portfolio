@@ -1,19 +1,6 @@
 "use client";
 
 import {
-  AGL_HEIGHT,
-  AGL_WIDTH,
-  aglFurniture,
-  aglNpcs,
-} from "@/data/aglData";
-import {
-  HOUSE_HEIGHT,
-  HOUSE_ROOMS,
-  HOUSE_WIDTH,
-  houseCats,
-  houseFurniture,
-} from "@/data/houseData";
-import {
   TOWN_ZONES,
   ZONE_ORDER,
   getZoneBuildings,
@@ -44,6 +31,12 @@ const KIND_COLOR = {
   hangout: "#a855f7",
 } as const;
 
+const SHORT_MAP_BTN: Record<TownZone, { icon: string; label: string }> = {
+  home_zone: { icon: "🏠", label: "Rumah" },
+  edu_zone: { icon: "🎓", label: "Sekolah" },
+  work_zone: { icon: "💼", label: "Kantor" },
+};
+
 export default function Hud({
   scene,
   zone,
@@ -57,77 +50,117 @@ export default function Hud({
   onSkipDriving,
   onExitHouse,
 }: HudProps) {
-  const [mapOpen, setMapOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const currentZone = TOWN_ZONES[zone];
   const zoneBuildings = getZoneBuildings(zone);
 
   return (
     <>
-      <div className="pointer-events-none absolute left-3 top-3 z-20 sm:left-4 sm:top-4">
-        <div className="pixel-panel !px-3 !py-2 max-w-[300px]">
-          <div className="flex items-center justify-between gap-2">
-            <h1 className="font-pixel text-[9.5px] leading-relaxed text-[#3b2a1a]">
+      <div className="pointer-events-none absolute left-2.5 top-2.5 z-20 sm:left-4 sm:top-4">
+        <div className="pixel-panel !px-2.5 !py-1.5 max-w-[195px] sm:!px-3 sm:!py-2 sm:max-w-[275px]">
+          <div className="flex items-center justify-between gap-1.5">
+            <h1 className="font-pixel text-[8.5px] sm:text-[9.5px] leading-snug text-[#3b2a1a] truncate">
               {scene === "house"
-                ? "🏠 Dalam Rumah Azzam"
+                ? "🏠 Rumah Azzam"
                 : scene === "agl"
-                  ? "🪩 AGL — Diskotik & Bar"
+                  ? "🪩 AGL Disco & Bar"
                   : scene === "driving"
                     ? vehicle === "car"
-                      ? "🚗 Perjalanan Mobil"
-                      : "🏍️ Perjalanan Motor"
-                    : currentZone.title}
+                      ? "🚗 Naik Mobil"
+                      : "🏍️ Naik Motor"
+                    : currentZone.shortLabel}
             </h1>
             <button
               type="button"
               onClick={onToggleMute}
-              className="pointer-events-auto pixel-btn !px-2 !py-0.5 text-[10px]"
+              className="pointer-events-auto pixel-btn shrink-0 !px-1.5 !py-0.5 text-[9px]"
               aria-label={muted ? "Nyalakan musik" : "Matikan musik"}
               title={muted ? "Nyalakan musik BGM" : "Matikan musik BGM"}
             >
-              {muted ? "🔇 Mute" : "🔊 BGM"}
+              {muted ? "🔇" : "🔊 BGM"}
             </button>
           </div>
-          <p className="mt-1 text-[11px] leading-snug text-[#6b4f3a]">
+          <p className="mt-0.5 text-[10px] sm:text-[11px] leading-tight text-[#6b4f3a] line-clamp-2">
             {scene === "driving" ? (
-              "W/S pindah jalur · D/→ gas ngebut · Space klakson 📯"
+              "W/S jalur · D/→ gas · Space klakson 📯"
             ) : nearestLabel ? (
               <>
-                <b>{nearestLabel}</b> · tekan E / klik
+                <b>{nearestLabel}</b> · E / klik
               </>
             ) : scene === "house" ? (
-              "Keliling perabot & sapa Gray Pi, Kimmy, Boba · E periksa"
+              "Keliling perabot & kucing · E periksa"
             ) : scene === "agl" ? (
-              "Vibing bareng teman rumah & DJ Valdy · E ngobrol"
+              "Vibing bareng teman & DJ · E ngobrol"
             ) : (
-              `${currentZone.subtitle} · WASD jalan · E interaksi`
+              "WASD jalan · E buka · Garasi pilih mobil/motor"
             )}
           </p>
         </div>
       </div>
 
-      <div className="absolute right-3 top-3 z-20 flex w-[196px] flex-col items-end gap-2 sm:right-4 sm:top-4 sm:w-[224px]">
-        {scene !== "driving" && (
-          <div className="pixel-panel w-full !p-2">
+      <div className="absolute right-2.5 top-2.5 z-20 flex w-[148px] flex-col items-end gap-1.5 sm:right-4 sm:top-4 sm:w-[192px]">
+        {scene === "driving" ? (
+          <button
+            type="button"
+            onClick={onSkipDriving}
+            className="pixel-btn w-full py-1.5 text-[9.5px] !bg-[#fde68a]"
+          >
+            ⚡ Langsung Sampai
+          </button>
+        ) : scene === "house" || scene === "agl" ? (
+          <button
+            type="button"
+            onClick={onExitHouse}
+            className="pixel-btn w-full py-1.5 text-[9.5px] !bg-[#fde68a]"
+          >
+            🚪 Keluar ke Kota
+          </button>
+        ) : (
+          <div className="pixel-panel w-full !p-1.5 sm:!p-2">
             <button
               type="button"
-              onClick={() => setMapOpen((v) => !v)}
-              className="flex w-full items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#5b3a29]"
+              onClick={() => setPanelOpen((v) => !v)}
+              className="flex w-full items-center justify-between text-[9.5px] font-bold uppercase tracking-wider text-[#5b3a29]"
             >
-              <span>
-                {scene === "house"
-                  ? "Denah Rumah"
-                  : scene === "agl"
-                    ? "Denah AGL"
-                    : `Peta: ${currentZone.shortLabel}`}
+              <span className="truncate">
+                🗺️ Peta & Pindah Map
               </span>
-              <span aria-hidden>{mapOpen ? "▾" : "▸"}</span>
+              <span aria-hidden className="ml-1 shrink-0">
+                {panelOpen ? "▾" : "▸"}
+              </span>
             </button>
 
-            {mapOpen &&
-              (scene === "town" ? (
+            {/* Quick 1-row map switch pills always accessible without blocking the screen */}
+            {!panelOpen && (
+              <div className="mt-1 grid grid-cols-3 gap-1">
+                {ZONE_ORDER.map((zId) => {
+                  const isCurrent = zId === zone;
+                  const info = SHORT_MAP_BTN[zId];
+                  return (
+                    <button
+                      key={zId}
+                      type="button"
+                      disabled={isCurrent}
+                      onClick={() => onTravelToZone(zId)}
+                      title={`Pergi ke ${TOWN_ZONES[zId].title}`}
+                      className={`pixel-btn !px-1 !py-0.5 text-[8.5px] text-center truncate ${
+                        isCurrent
+                          ? "!bg-[#bbf7d0] !text-[#14532d] font-extrabold cursor-default"
+                          : "hover:!bg-[#fde68a]"
+                      }`}
+                    >
+                      {info.icon} {info.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {panelOpen && (
+              <div className="mt-1.5 flex flex-col gap-1.5">
                 <svg
                   viewBox={`0 0 ${currentZone.width} ${currentZone.height}`}
-                  className="mt-1.5 block w-full rounded-sm border-2 border-[#5b3a29] bg-[#74bf55]"
+                  className="block w-full rounded-sm border-2 border-[#5b3a29] bg-[#74bf55]"
                   role="img"
                   aria-label="Peta zona"
                 >
@@ -181,199 +214,55 @@ export default function Hud({
                     strokeWidth={8}
                   />
                 </svg>
-              ) : scene === "house" ? (
-                <svg
-                  viewBox={`0 0 ${HOUSE_WIDTH} ${HOUSE_HEIGHT}`}
-                  className="mt-1.5 block w-full rounded-sm border-2 border-[#5b3a29] bg-[#2a1f18]"
-                  role="img"
-                  aria-label="Denah dalam rumah"
-                >
-                  {HOUSE_ROOMS.map((r) => (
-                    <rect
-                      key={r.id}
-                      x={r.x}
-                      y={r.y}
-                      width={r.w}
-                      height={r.h}
-                      fill={
-                        r.floor === "gym"
-                          ? "#4b5563"
-                          : r.floor === "dark_wood"
-                            ? "#9a6a45"
-                            : "#d2a26f"
-                      }
-                      stroke="#5b3a29"
-                      strokeWidth={8}
-                    />
-                  ))}
-                  {houseFurniture.map((f) => (
-                    <rect
-                      key={f.id}
-                      x={f.x - f.width / 2}
-                      y={f.y - f.height}
-                      width={f.width}
-                      height={f.height}
-                      rx={4}
-                      fill={f.isExit ? "#f59e0b" : "#7c4a24"}
-                    />
-                  ))}
-                  {houseCats.map((c) => (
-                    <circle key={c.id} cx={c.homeX} cy={c.homeY} r={14} fill={c.collarColor} />
-                  ))}
-                  <circle
-                    cx={playerPos.x}
-                    cy={playerPos.y}
-                    r={18}
-                    fill="#ef4444"
-                    stroke="#fff"
-                    strokeWidth={6}
-                  />
-                </svg>
-              ) : (
-                <svg
-                  viewBox={`0 0 ${AGL_WIDTH} ${AGL_HEIGHT}`}
-                  className="mt-1.5 block w-full rounded-sm border-2 border-[#ec4899] bg-[#0c0814]"
-                  role="img"
-                  aria-label="Denah diskotik AGL"
-                >
-                  <rect
-                    x={90}
-                    y={70}
-                    width={280}
-                    height={120}
-                    rx={4}
-                    fill="#261a3d"
-                    stroke="#8b5cf6"
-                    strokeWidth={4}
-                  />
-                  <rect
-                    x={560}
-                    y={70}
-                    width={280}
-                    height={125}
-                    rx={4}
-                    fill="#201733"
-                    stroke="#ec4899"
-                    strokeWidth={4}
-                  />
-                  <rect
-                    x={330}
-                    y={230}
-                    width={260}
-                    height={170}
-                    rx={6}
-                    fill="#3b1e54"
-                    stroke="#ec4899"
-                    strokeWidth={6}
-                  />
-                  {aglFurniture.map((f) => (
-                    <rect
-                      key={f.id}
-                      x={f.x - f.width / 2}
-                      y={f.y - f.height}
-                      width={f.width}
-                      height={f.height}
-                      rx={3}
-                      fill={f.isExit ? "#facc15" : "#6366f1"}
-                    />
-                  ))}
-                  {aglNpcs.map((n) => (
-                    <circle
-                      key={n.id}
-                      cx={n.x}
-                      cy={n.y}
-                      r={12}
-                      fill="#ec4899"
-                      stroke="#fff"
-                      strokeWidth={3}
-                    />
-                  ))}
-                  <circle
-                    cx={playerPos.x}
-                    cy={playerPos.y}
-                    r={18}
-                    fill="#facc15"
-                    stroke="#fff"
-                    strokeWidth={6}
-                  />
-                </svg>
-              ))}
-          </div>
-        )}
 
-        {scene === "town" ? (
-          <div className="pixel-panel flex w-full flex-col gap-1.5 !p-2">
-            <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-[#5b3a29]">
-              <span>Kendaraan:</span>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => onSelectVehicle("car")}
-                  className={`pixel-btn !px-2 !py-0.5 text-[9px] ${
-                    vehicle === "car" ? "!bg-[#fde68a] font-extrabold" : "opacity-80"
-                  }`}
-                >
-                  🚗 Mobil
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSelectVehicle("moto")}
-                  className={`pixel-btn !px-2 !py-0.5 text-[9px] ${
-                    vehicle === "moto" ? "!bg-[#fde68a] font-extrabold" : "opacity-80"
-                  }`}
-                >
-                  🏍️ Motor
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-[#5b3a29]">
-              Pindah Map ({vehicle === "car" ? "Naik Mobil" : "Naik Motor"}):
-            </div>
-            <div className="flex flex-col gap-1">
-              {ZONE_ORDER.map((zId, idx) => {
-                const z = TOWN_ZONES[zId];
-                const isCurrent = zId === zone;
-                const icon = idx === 0 ? "🏠" : idx === 1 ? "🎓" : "💼";
-                return (
+                <div className="grid grid-cols-2 gap-1">
                   <button
-                    key={zId}
                     type="button"
-                    disabled={isCurrent}
-                    onClick={() => onTravelToZone(zId)}
-                    className={`pixel-btn flex w-full items-center justify-between px-2 py-1 text-left text-[9.5px] ${
-                      isCurrent
-                        ? "!bg-[#bbf7d0] !text-[#14532d] cursor-default font-extrabold"
-                        : "hover:!bg-[#fde68a]"
+                    onClick={() => onSelectVehicle("car")}
+                    className={`pixel-btn !px-1.5 !py-0.5 text-[8.5px] ${
+                      vehicle === "car" ? "!bg-[#fde68a] font-extrabold" : "opacity-80"
                     }`}
                   >
-                    <span>
-                      {icon} Map {idx + 1}: {z.shortLabel}
-                    </span>
-                    <span className="text-[8.5px]">
-                      {isCurrent ? "● Di Sini" : "Gas ➔"}
-                    </span>
+                    🚗 Mobil
                   </button>
-                );
-              })}
-            </div>
+                  <button
+                    type="button"
+                    onClick={() => onSelectVehicle("moto")}
+                    className={`pixel-btn !px-1.5 !py-0.5 text-[8.5px] ${
+                      vehicle === "moto" ? "!bg-[#fde68a] font-extrabold" : "opacity-80"
+                    }`}
+                  >
+                    🏍️ Motor
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1">
+                  {ZONE_ORDER.map((zId) => {
+                    const isCurrent = zId === zone;
+                    const info = SHORT_MAP_BTN[zId];
+                    return (
+                      <button
+                        key={zId}
+                        type="button"
+                        disabled={isCurrent}
+                        onClick={() => {
+                          setPanelOpen(false);
+                          onTravelToZone(zId);
+                        }}
+                        className={`pixel-btn !px-1 !py-1 text-[8.5px] text-center truncate ${
+                          isCurrent
+                            ? "!bg-[#bbf7d0] !text-[#14532d] font-extrabold cursor-default"
+                            : "hover:!bg-[#fde68a]"
+                        }`}
+                      >
+                        {info.icon} {info.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
-        ) : scene === "driving" ? (
-          <button
-            type="button"
-            onClick={onSkipDriving}
-            className="pixel-btn w-full py-1.5 text-[10px] !bg-[#fde68a]"
-          >
-            ⚡ Langsung Sampai Tujuan
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onExitHouse}
-            className="pixel-btn w-full py-1.5 text-[10px] !bg-[#fde68a]"
-          >
-            🚪 Keluar ke Kota
-          </button>
         )}
       </div>
     </>

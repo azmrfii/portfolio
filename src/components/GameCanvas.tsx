@@ -983,7 +983,7 @@ export default function GameCanvas({
 
         // Check click on Highway Gates
         for (const gate of [cfg.leftGate, cfg.rightGate]) {
-          if (gate && Math.hypot(mx - gate.x, my - (gate.y - 25)) <= 68) {
+          if (gate && Math.hypot(mx - gate.x, my - (gate.y + 18)) <= 68) {
             startDriving(gate.toZone, "manual");
             return;
           }
@@ -1576,7 +1576,7 @@ export default function GameCanvas({
             drawHint(
               ctx,
               nearGate.x + (nearGate.direction === "right" ? -52 : 52) - cam.x,
-              nearGate.y - cam.y - 82,
+              nearGate.y - cam.y + 78,
               `E / Jalan terus: Naik ${vehicleRef.current === "car" ? "Mobil 🚗" : "Motor 🏍️"}`,
             );
           } else if (nearPark) {
